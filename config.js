@@ -13,4 +13,4 @@ window.OWNERS = ["luke@totalwelding.com.au"];
 // Shown on the calendar before anyone is let in.
 window.DEFAULT_CREW = ["Luke", "Hudson", "Jake"];
 // Google Drive photo store (Apps Script web app from drive-photos.gs). Blank = keep photos in Firestore.
-window.PHOTO_SCRIPT_URL = "";
+window.PHOTO_SCRIPT_URL = "https://script.google.com/macros/s/AKfycby_dEjH5IanbgBPak17gisdfGKfhVJQ5f9Arc8SNgOUbDnY4GQy1vgFupD-Q4ZfFEJp0w/exec";
