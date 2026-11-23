@@ -1,12 +1,12 @@
 // Firebase project: tws-job-board (Firestore in Sydney, Google sign-in).
 // Paste the web app config from Firebase console > Project settings > Your apps.
 window.FIREBASE_CONFIG = {
-  apiKey: "PASTE_API_KEY",
+  apiKey: "AIzaSyAWV9QW_CdoQ81UI-7BCT3dGRXyUzEQMQo",
   authDomain: "tws-job-board.firebaseapp.com",
   projectId: "tws-job-board",
   storageBucket: "tws-job-board.firebasestorage.app",
-  messagingSenderId: "PASTE_SENDER_ID",
-  appId: "PASTE_APP_ID"
+  messagingSenderId: "225485000932",
+  appId: "1:225485000932:web:adcfa3406f71fdefd5dcf1"
 };
 // Owners always get in and are managers. Must match firestore.rules.
 window.OWNERS = ["luke@totalwelding.com.au"];
