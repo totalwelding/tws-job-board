@@ -574,15 +574,21 @@ function renderIdeas(){
   el.querySelectorAll("[data-idel]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc("ideas/"+b.dataset.idel).delete()}catch(err){fail(err)}});
 }
 
-/* ---------- PHOTOS (stored compressed in Firestore: photos = thumb + info, photoData = full size) ---------- */
+/* ---------- PHOTOS: thumbs in Firestore (photos/*); full size in Luke's Google Drive via drive-photos.gs,
+   or in Firestore photoData/* if Drive isn't set up or can't be reached ---------- */
+async function drive(body){const url=window.PHOTO_SCRIPT_URL;if(!url)throw new Error("no drive");
+  const token=await S.user.getIdToken();const r=await fetch(url,{method:"POST",body:JSON.stringify({...body,token})});const j=await r.json();if(!j.ok)throw new Error(j.error||"drive failed");return j}
+function photoPath(target,targetId,stage){if(target==="job"){const j=job(targetId)||{};return[`${j.code||""} ${j.title||""}`.trim(),stage[0].toUpperCase()+stage.slice(1)]}
+  const x=S.fix.find(f=>f.id===targetId)||{};return["Repairs",`${String(x.at||new Date().toISOString()).slice(0,10)} ${x.item||targetId}`]}
 function loadImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),i=new Image();i.onload=()=>{res(i);setTimeout(()=>URL.revokeObjectURL(u),1000)};i.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("bad image"))};i.src=u})}
 function shrink(img,max,q){const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);c.getContext("2d").drawImage(img,0,0,c.width,c.height);return c.toDataURL("image/jpeg",q)}
 async function addPhotos(files,target,targetId,stage,code){
   const list=[...files];if(!list.length)return;let n=0;toast(`Uploading ${list.length} photo${list.length>1?"s":""}…`,60000);
   for(const f of list){try{const img=await loadImg(f);let full=shrink(img,1600,.72);if(full.length>850000)full=shrink(img,1200,.6);if(full.length>950000)full=shrink(img,900,.55);
       const thumb=shrink(img,240,.6),id="p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),now=new Date();
-      const bt=db.batch();bt.set(db.doc("photoData/"+id),{data:full});
-      bt.set(db.doc("photos/"+id),{business:BIZ,target,targetId,jobCode:code||"",stage,thumb,w:img.naturalWidth,h:img.naturalHeight,who:S.me,email:myEmail(),date:ymd(now),at:now.toISOString(),caption:""});
+      let driveId="";try{if(window.PHOTO_SCRIPT_URL)driveId=(await drive({action:"put",path:photoPath(target,targetId,stage),name:`${ymd(now)} ${pad(now.getHours())}${pad(now.getMinutes())} ${S.me} ${id}.jpg`,note:`${code||""} ${stage} by ${S.me}`,data:full})).id}catch(e){console.warn("drive",e)}
+      const bt=db.batch();if(!driveId)bt.set(db.doc("photoData/"+id),{data:full});
+      bt.set(db.doc("photos/"+id),{business:BIZ,target,targetId,jobCode:code||"",stage,thumb,driveId,w:img.naturalWidth,h:img.naturalHeight,who:S.me,email:myEmail(),date:ymd(now),at:now.toISOString(),caption:""});
       await bt.commit();n++}catch(e){console.warn(e)}}
   toast(n===list.length?`${n} photo${n>1?"s":""} saved`:`${n} of ${list.length} saved. Try the others again.`,3000)}
 function photosOf(target,id,stage){return S.photos.filter(p=>p.target===target&&p.targetId===id&&(!stage||p.stage===stage)).sort((a,b)=>String(a.at).localeCompare(b.at))}
@@ -597,8 +603,9 @@ async function viewPhoto(id){const p=S.photos.find(x=>x.id===id);if(!p)return;
   const v=document.createElement("div");v.className="viewer";v.innerHTML=`<img src="${p.thumb}" alt=""><div class="small">${esc(p.stage)} · ${esc(p.who)} · ${fmtD(p.date)} ${fmtT(p.at)}</div>
   <div class="row" style="justify-content:center"><button class="btn small" id="pvX">Close</button>${isMgr()||p.email===myEmail()?`<button class="btn small danger" id="pvD">Delete</button>`:""}</div>`;
   document.body.appendChild(v);const close=()=>v.remove();v.onclick=e=>{if(e.target===v)close()};v.querySelector("#pvX").onclick=close;
-  const d=v.querySelector("#pvD");if(d)d.onclick=async()=>{if(d.dataset.c!=="1"){d.dataset.c="1";d.textContent="Tap again to delete";return}try{await db.doc("photos/"+id).delete();await db.doc("photoData/"+id).delete();close();toast("Photo deleted")}catch(err){fail(err)}};
-  try{const s=await db.doc("photoData/"+id).get();if(s.exists&&v.isConnected)v.querySelector("img").src=s.data().data}catch(e){}}
+  const d=v.querySelector("#pvD");if(d)d.onclick=async()=>{if(d.dataset.c!=="1"){d.dataset.c="1";d.textContent="Tap again to delete";return}try{await db.doc("photos/"+id).delete();if(p.driveId)drive({action:"del",id:p.driveId}).catch(()=>{});else await db.doc("photoData/"+id).delete();close();toast("Photo deleted")}catch(err){fail(err)}};
+  try{let src="";if(p.driveId)src=(await drive({action:"get",id:p.driveId})).data;else{const s=await db.doc("photoData/"+id).get();if(s.exists)src=s.data().data}
+    if(src&&v.isConnected)v.querySelector("img").src=src}catch(e){console.warn(e)}}
 
 /* ---------- MORE ---------- */
 function moreCounts(){const due=S.tix.filter(x=>x.expiry&&daysLeft(x.expiry)<=(+x.remind||30)&&(isMgr()||x.who===S.me)).length;

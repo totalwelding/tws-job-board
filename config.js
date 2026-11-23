@@ -12,3 +12,5 @@ window.FIREBASE_CONFIG = {
 window.OWNERS = ["luke@totalwelding.com.au"];
 // Shown on the calendar before anyone is let in.
 window.DEFAULT_CREW = ["Luke", "Hudson", "Jake"];
+// Google Drive photo store (Apps Script web app from drive-photos.gs). Blank = keep photos in Firestore.
+window.PHOTO_SCRIPT_URL = "";
