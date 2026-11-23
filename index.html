@@ -90,7 +90,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .toolbar .sp{flex:1}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px}
 .card{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:10px;padding:12px;cursor:pointer;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
-.card.Active{border-left-color:var(--good)}.card.Planned{border-left-color:var(--accent)}.card[class*="hold"]{border-left-color:var(--amber)}
+.card.Active{border-left-color:var(--good)}.card.InHouse{border-left-color:var(--hi)}.card.Planned{border-left-color:var(--accent)}.card[class*="hold"]{border-left-color:var(--amber)}
 .card .t{font-weight:600;font-size:15px}
 .card .m{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}
 .grp{font:600 13px var(--display);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:6px 2px}
@@ -337,8 +337,10 @@ function render(){syncPrio();
 }
 
 /* ---------- CLOCK ---------- */
-function todaysPick(){const t=ymd(new Date());const a=S.cal.find(c=>c.date===t&&c.who===S.me&&job(c.jobId));if(a)return a.jobId;
-  const last=S.shifts.filter(s=>s.email===myEmail()).sort((a,b)=>String(b.on).localeCompare(a.on))[0];if(last&&job(last.jobId)&&job(last.jobId).status!=="Done")return last.jobId;return""}
+const clockable=j=>j&&!j.inhouse&&j.status!=="Done";
+const clockJobs=()=>openJobs().filter(clockable);
+function todaysPick(){const t=ymd(new Date());const a=S.cal.find(c=>c.date===t&&c.who===S.me&&clockable(job(c.jobId)));if(a)return a.jobId;
+  const last=S.shifts.filter(s=>s.email===myEmail()).sort((a,b)=>String(b.on).localeCompare(a.on))[0];if(last&&clockable(job(last.jobId)))return last.jobId;return""}
 function renderClock(){
   const el=$("v-clock");if(el.contains(document.activeElement)&&document.activeElement.tagName!=="BUTTON")return;
   const o=myOpen();
@@ -358,7 +360,7 @@ function renderClock(){
       <button class="btn stop big" id="clockOff">Clock off</button>
       <button class="btn link" data-open="${esc(o.jobId)}">Open job card</button></div>`;
   }else{
-    const pick=S.pick??todaysPick();const js=openJobs();
+    const pick=S.pick??todaysPick();const js=clockJobs();
     h+=`<div class="panel clock"><span class="pill" style="align-self:center">NOT CLOCKED ON</span>
       ${js.length?`<label class="f" style="text-align:left">Job<select id="cJob"><option value="">Choose job…</option>${js.map(j=>`<option value="${esc(j.id)}" ${j.id===pick?"selected":""}>${esc(j.code+" · "+j.title)}</option>`).join("")}</select></label>
       <button class="btn small" id="findSite" style="align-self:center">📍 Find my site</button>
@@ -379,10 +381,10 @@ function renderClock(){
 setInterval(()=>{const e=$("elapsed"),o=myOpen();if(e&&o)e.textContent=elapsed(o.on)},20000);
 async function findSite(){const b=$("findSite");b.disabled=true;b.textContent="Finding you…";const loc=await getLoc();b.disabled=false;b.textContent="📍 Find my site";
   if(!loc)return toast("Couldn't get your location. Turn on location for this app.",4000);
-  const near=openJobs().filter(hasLoc).map(j=>({j,d:dist(loc,j)})).sort((a,b)=>a.d-b.d)[0];
+  const near=clockJobs().filter(hasLoc).map(j=>({j,d:dist(loc,j)})).sort((a,b)=>a.d-b.d)[0];
   if(near&&near.d<=(+near.j.radius||300)){S.pick=near.j.id;renderClock();toast("You're at "+near.j.title)}
   else toast(near?`Nearest site is ${near.j.title}, ${(near.d/1000).toFixed(1)} km away. Pick the job yourself.`:"No sites have a location set yet. Pick the job yourself.",4500)}
-async function clockOn(jobId,btn){
+async function clockOn(jobId,btn){if(!clockable(job(jobId)))return toast("That's an in-house job: no clocking on.");
   if(!jobId)return toast("Pick a job first");if(myOpen())return;
   btn.disabled=true;btn.textContent="Getting location…";
   const loc=await getLoc(),j=job(jobId),now=new Date();
@@ -419,13 +421,18 @@ function renderJobs(){
   const list=S.jobs.filter(j=>!q||[j.code,j.title,j.client,j.site,j.address,j.contactName].join(" ").toLowerCase().includes(q));
   if(!S.jobs.length){$("jobList").innerHTML=`<div class="panel muted" style="text-align:center">${S.loaded.jobs?"No jobs yet."+(isMgr()?" Tap <b>+ New job</b>.":""):"Loading…"}</div>`;return}
   let h="";
-  for(const st of STATUSES){const js=list.filter(j=>(j.status||"Planned")===st).sort(st==="Done"?(a,b)=>String(b.code).localeCompare(a.code):byPrio);if(!js.length)continue;
+  const ih=list.filter(j=>j.inhouse&&j.status!=="Done").sort(byPrio);
+  for(const st of STATUSES){const js=list.filter(j=>(j.status||"Planned")===st&&!(j.inhouse&&st!=="Done")).sort(st==="Done"?(a,b)=>String(b.code).localeCompare(a.code):byPrio);if(!js.length)continue;
     if(st==="Done"&&!q){h+=`<details><summary class="grp">Done (${js.length})</summary><div class="cards">${js.map(card).join("")}</div></details>`;continue}
-    h+=`<div class="grp">${st} (${js.length})</div><div class="cards">${js.map(card).join("")}</div>`}
+    h+=`<div class="grp">${st} (${js.length})</div><div class="cards">${js.map(card).join("")}</div>`;}
+  if(ih.length){const doneIdx=h.indexOf("<details>");const sec=`<div class="grp">In-house · no clocking on (${ih.length})</div><div class="cards">${ih.map(card).join("")}</div>`;h=doneIdx>=0?h.slice(0,doneIdx)+sec+h.slice(doneIdx):h+sec}
   $("jobList").innerHTML=h||`<div class="muted">No matches.</div>`;
   bindOpen($("jobList"));
 }
 function card(j){const h=jobHrs(j.id),e=expHrs(j.id),pc=e?Math.min(100,h/e*100):0;const steps=(j.plan||[]),dn=steps.filter(s=>s.done).length;
+  if(j.inhouse)return`<button class="card InHouse" data-open="${esc(j.id)}"><span class="m" style="color:inherit"><span class="code">${esc(j.code)}</span>${prioPill(j)}</span><span class="t">${esc(j.title)}</span>
+  ${steps.length?`<span class="m"><span>${dn}/${steps.length} done</span><span>${(j.crew||[]).map(esc).join(", ")}</span></span><span class="bar"><i style="width:${dn/steps.length*100}%"></i></span>
+  <span style="font-size:12px;color:var(--muted);line-height:1.5">${steps.map(s=>`${s.done?"✓":"○"} ${esc(s.t)}`).join("<br>")}</span>`:`<span class="m"><span>No items yet</span></span>`}</button>`;
   return`<button class="card ${esc(j.status||"Planned").replace(/ /g,"")}" data-open="${esc(j.id)}"><span class="m" style="color:inherit"><span class="code">${esc(j.code)}</span>${prioPill(j)}</span><span class="t">${esc(j.title)}</span>
   <span class="m"><span>${esc(j.site||j.client||"")}</span><span>${(j.crew||[]).map(esc).join(", ")}</span></span>
   <span class="m"><span>${hf(h)}${e?" / "+hf(e):""} h</span><span>${steps.length?`Plan ${dn}/${steps.length}`:""}</span></span>
@@ -451,7 +458,7 @@ function renderSheet(){
   ${isNew?"":`<div class="row">
     ${j.contactPhone?`<a class="btn" href="tel:${esc(j.contactPhone.replace(/[^\d+]/g,""))}">📞 ${esc(j.contactName||"Call site")}</a>`:""}
     ${mp?`<a class="btn" href="${esc(mp)}" target="_blank" rel="noopener">🗺 Map</a>`:""}
-    ${!o&&j.status!=="Done"?`<button class="btn go" id="sOn">Clock on here</button>`:""}</div>
+    ${!o&&clockable(j)?`<button class="btn go" id="sOn">Clock on here</button>`:j.inhouse?`<span class="pill">In-house · no clocking on</span>`:""}</div>
   <div class="stats" ${mg?"":'style="grid-template-columns:1fr 1fr"'}><div class="stat"><b>${hf(h)}</b><span>Hours</span></div>${mg?`<div class="stat"><b>${e?hf(e):"–"}</b><span>Expected</span></div>
     <div class="stat ${e&&h>e?"bad":""}"><b>${e?hf(e-h):"–"}</b><span>Left</span></div>`:""}<div class="stat"><b>${money(cs)}</b><span>Consumables</span></div></div>
   ${e?`<div class="bar ${h>e?"over":""}"><i style="width:${Math.min(100,h/e*100)}%"></i></div>`:""}
@@ -460,7 +467,7 @@ function renderSheet(){
     ${!S.rates.labourCost?`<div class="muted small">Set labour cost under Manager → Rates to see real profit.</div>`:""}`:""}`}
 
   ${isNew?"":`<div class="panel"><h3>Photos</h3>${[["before","Before"],["during","During"],["after","After"]].map(([k,l])=>`<div class="pstage">${l} (${photosOf("job",j.id,k).length})</div>${photoGrid("job",j.id,k,j.code,"Add "+l.toLowerCase())}`).join("")}</div>`}
-  <div class="panel"><h3>Plan</h3>
+  <div class="panel"><h3>${j.inhouse?"Items":"Plan"}</h3>
     <ul class="plan" id="plan">${(j.plan||[]).map((s,i)=>`<li class="${s.done?"dn":""}"><input type="checkbox" data-step="${i}" ${s.done?"checked":""} ${isNew?"disabled":""} aria-label="Done"><span>${esc(s.t)}</span>${mg?`<button class="btn small link" data-up="${i}" aria-label="Move up">↑</button><button class="btn small link danger" data-rm="${i}" aria-label="Remove">✕</button>`:""}</li>`).join("")}</ul>
     ${isNew?`<div class="muted small">Create the job first, then add the steps.</div>`:`<form class="row" id="stepF"><input class="in" id="stepIn" placeholder="Add a step, e.g. Mark out and cut piece C" style="flex:1 1 200px;width:auto"><button class="btn" type="submit">Add step</button></form>`}
   </div>
@@ -478,6 +485,7 @@ function renderSheet(){
     <label class="f">Finish by (date)<input name="end" type="date" value="${esc(j.end)}" ${ro}></label>
     <label class="f">Finish by (time)<input name="dueTime" type="time" value="${esc(j.dueTime||"")}" placeholder="15:30" ${ro}></label>
     <label class="f">Priority<select name="prioSet" ${ro}>${[["auto","Auto (from time available)"],["Urgent","Urgent"],["High","High"],["Normal","Normal"],["Low","Low"]].map(([v,l])=>`<option value="${v}" ${(j.prioSet||"auto")===v?"selected":""}>${l}</option>`).join("")}</select></label>
+    <label class="full" style="display:flex;gap:8px;align-items:center;font-size:14px;font-weight:500"><input type="checkbox" name="inhouse" style="width:20px;height:20px" ${j.inhouse?"checked":""} ${ro}>In-house job (our own gear, yard, trucks) – no clocking on</label>
     <div class="f full"><span>Crew</span><div class="row" style="gap:12px;padding-top:4px">${people().map(p=>`<label style="display:flex;gap:6px;align-items:center;font-size:14px;text-transform:none;font-weight:400;color:var(--fg)"><input type="checkbox" name="crew" value="${esc(p)}" ${(j.crew||[]).includes(p)?"checked":""} ${ro}>${esc(p)}</label>`).join("")}</div></div>
     <label class="f full">Notes / scope<textarea name="notes" rows="3" ${ro}>${esc(j.notes)}</textarea></label>
     <label class="f">Site GPS (lat, lng)<input name="ll" value="${hasLoc(j)?j.lat+", "+j.lng:""}" placeholder="Paste a Google Maps link or lat, lng" ${ro}></label>
@@ -511,7 +519,7 @@ function renderSheet(){
     const ll=parseLatLng(f.elements.ll.value);if(f.elements.ll.value.trim()&&!ll)return toast("Couldn't read that location. Paste lat, lng like -23.85, 151.25");
     const now=new Date().toISOString();
     const b={code:j.code,business:BIZ,title:f.elements.title.value.trim(),client:f.elements.client.value.trim(),site:f.elements.site.value.trim()||f.elements.title.value.trim(),address:f.elements.address.value.trim(),contactName:f.elements.contactName.value.trim(),contactPhone:f.elements.contactPhone.value.trim(),
-      status:f.elements.status.value,start:f.elements.start.value,end:f.elements.end.value,dueTime:f.elements.dueTime.value,prioSet:f.elements.prioSet.value,crew:[...f.querySelectorAll("[name=crew]:checked")].map(x=>x.value),notes:f.elements.notes.value.trim(),
+      status:f.elements.status.value,start:f.elements.start.value,end:f.elements.end.value,dueTime:f.elements.dueTime.value,prioSet:f.elements.prioSet.value,inhouse:f.elements.inhouse.checked,crew:[...f.querySelectorAll("[name=crew]:checked")].map(x=>x.value),notes:f.elements.notes.value.trim(),
       lat:ll?ll.lat:null,lng:ll?ll.lng:null,radius:+f.elements.radius.value||300,updatedAt:now};
     const pr={expectedHrs:r2(f.elements.expectedHrs.value),pricing:f.elements.pricing.value,quote:r2(f.elements.quote.value),chargeRate:r2(f.elements.chargeRate.value),markup:r2(f.elements.markup.value),jobCode:j.code};
     try{let id=j.id;if(isNew){b.createdAt=now;b.plan=[];const ref=db.collection("jobs").doc(j.code.toLowerCase());id=ref.id;await ref.set(b);S.open=id;toast("Job created")}else{await db.doc("jobs/"+id).set(b,{merge:true});toast("Saved")}

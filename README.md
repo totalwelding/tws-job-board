@@ -24,7 +24,7 @@ All dates are `YYYY-MM-DD` (Brisbane local). Times are ISO UTC. Money is $ ex GS
 
 | Collection | Fields |
 |---|---|
-| `jobs/{tws-0001}` | code, title, client, site, address, contactName, contactPhone, status (Active/Planned/On hold/Done), start, end (finish-by date), dueTime, prioSet (auto/Urgent/High/Normal/Low), priority (kept up to date by the manager's app), crew[], plan[{t,done,by,at}], lat, lng, radius, notes |
+| `jobs/{tws-0001}` | code, title, client, site, address, contactName, contactPhone, status (Active/Planned/On hold/Done), inhouse (true = own gear/yard, no clocking on), start, end (finish-by date), dueTime, prioSet (auto/Urgent/High/Normal/Low), priority (kept up to date by the manager's app), crew[], plan[{t,done,by,at}], lat, lng, radius, notes |
 | `shifts/{id}` | date, who, email, jobId, jobCode, site, on, off, breakMin, hours, onLoc/offLoc {lat,lng,acc,dist,onSite}, note |
 | `consumables/{id}` | date, jobId, jobCode, site, item, qty, unit, cost, who |
 | `calendar/{date_who_job}` | date, who, jobId, jobCode, site, hrs (planned), note |
