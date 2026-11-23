@@ -275,7 +275,34 @@ const isMgr=()=>isOwner()||S.role==="manager";
 const job=id=>S.jobs.find(j=>j.id===id);
 const jobName=id=>{const j=job(id);return j?`${j.code} ${j.title}`:"(deleted job)"};
 function people(){const n=Object.values(S.access).map(m=>m.name).filter(Boolean);const all=[...new Set([...DEFAULT_CREW,...n])];return all}
-const openJobs=()=>S.jobs.filter(j=>j.status!=="Done").sort((a,b)=>STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status)||String(a.code).localeCompare(b.code));
+/* ---- priority: from finish-by time vs crew hours available (managers also use expected hours) ---- */
+const PRIO=["Overdue","Urgent","High","Normal","Low"],PCLS={Overdue:"bad",Urgent:"bad",High:"warn",Normal:"",Low:""};
+const DAY_START=7,DAY_END=15.5,DAY_HRS=8; // 7:00–3:30 with a 30 min break
+const prank=p=>{const i=PRIO.indexOf(p);return i<0?4:i};
+const higher=(a,b)=>prank(a)<=prank(b)?a:b;
+function dueAt(j){if(!j.end)return null;return new Date(j.end+"T"+(j.dueTime||"15:30")+":00")}
+function workHrs(a,b){let h=0;const d=new Date(a);d.setHours(0,0,0,0);
+  while(d<b){const dw=d.getDay();if(dw>=1&&dw<=5){const s=new Date(d);s.setHours(DAY_START,0,0,0);const e=new Date(d);e.setHours(Math.floor(DAY_END),(DAY_END%1)*60,0,0);
+      const x=Math.max(s,a),y=Math.min(e,b);if(y>x)h+=(y-x)/36e5*(DAY_HRS/(DAY_END-DAY_START))}d.setDate(d.getDate()+1)}return h}
+function prioInfo(j,full){
+  if(j.status==="Done"||j.status==="On hold")return{p:null};
+  if(j.prioSet&&j.prioSet!=="auto")return{p:j.prioSet,why:"set by manager"};
+  const d=dueAt(j),now=new Date();if(!d)return{p:"Low",why:"no finish-by date"};
+  if(d<now)return{p:"Overdue",why:"past the finish-by time"};
+  const avail=workHrs(now,d),crew=Math.max(1,(j.crew||[]).length);
+  let p=avail<=DAY_HRS?"Urgent":avail<=3*DAY_HRS?"High":"Normal",why=`${hf(avail)} working hours left`;
+  if(full){const left=expHrs(j.id)-jobHrs(j.id);if(left>0){const cap=avail*crew,r=left/Math.max(cap,.01);
+    p=higher(p,r>=.8?"Urgent":r>=.5?"High":"Normal");why=`needs ${hf(left)} h, ${hf(cap)} crew hours left (${crew} on it)`}}
+  return{p,why}}
+function prioOf(j){const a=prioInfo(j,isMgr());if(!a.p)return a;if(isMgr()||(j.prioSet&&j.prioSet!=="auto"))return a;
+  return j.priority&&prank(j.priority)<prank(a.p)&&j.priority!=="Overdue"?{p:j.priority,why:j.priorityWhy||""}:a}
+const prioPill=j=>{const a=prioOf(j);return a.p&&!(a.p==="Low"&&a.why==="no finish-by date")?`<span class="pill ${PCLS[a.p]}" title="${esc(a.why||"")}">${a.p}</span>`:""};
+// managers keep the stored priority up to date so crew (who can't see expected hours) see the same thing
+let prioT=null;function syncPrio(){if(!isMgr()||!S.loaded.jobs)return;clearTimeout(prioT);prioT=setTimeout(()=>{S.jobs.forEach(j=>{const a=prioInfo(j,true);
+  if(a.p&&(a.p!==j.priority)){db.doc("jobs/"+j.id).update({priority:a.p,priorityWhy:a.p==="Low"?"no finish-by date":"tight on time",priorityAt:new Date().toISOString()}).catch(()=>{})}})},1500)}
+setInterval(()=>{if(S.me&&S.view==="jobs")renderJobs();syncPrio()},10*60000);
+const byPrio=(a,b)=>prank((prioOf(a).p)||"Low")-prank((prioOf(b).p)||"Low")||String(a.end||"9999").localeCompare(b.end||"9999")||String(a.code).localeCompare(b.code);
+const openJobs=()=>S.jobs.filter(j=>j.status!=="Done").sort((a,b)=>STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status)||byPrio(a,b));
 const jobHrs=id=>S.shifts.filter(s=>s.jobId===id&&s.hours!=null).reduce((a,s)=>a+(+s.hours||0),0);
 const expHrs=id=>+((S.money[id]||{}).expectedHrs)||0;
 const jobCons=id=>S.cons.filter(c=>c.jobId===id).reduce((a,c)=>a+(+c.cost||0),0);
@@ -301,7 +328,7 @@ async function recompute(date){
 function show(v){if(v==="mgr"&&!isMgr())v="clock";S.view=v;["clock","jobs","cal","tix","ideas","fix","buy","more","mgr"].forEach(k=>$("v-"+k).hidden=k!==v);
   const nv=["clock","jobs","cal"].includes(v)?v:"more";document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===nv));if(S.me)try{localStorage.setItem("tws-view",v)}catch(e){}render();window.scrollTo(0,0)}
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));
-function render(){
+function render(){syncPrio();
   document.querySelectorAll(".mgr").forEach(e=>e.hidden=!isMgr());
   const mb=moreCounts(),tot=mb.tix+mb.fix+mb.buy+mb.req;$("moreBadge").hidden=!tot;$("moreBadge").textContent=tot;
   if(S.view==="clock")renderClock();else if(S.view==="jobs")renderJobs();else if(S.view==="cal")renderCal();else if(S.view==="tix")renderTix();else if(S.view==="ideas")renderIdeas();else if(S.view==="fix")renderFix();else if(S.view==="buy")renderBuy();else if(S.view==="more")renderMore();else renderMgr();
@@ -392,18 +419,18 @@ function renderJobs(){
   const list=S.jobs.filter(j=>!q||[j.code,j.title,j.client,j.site,j.address,j.contactName].join(" ").toLowerCase().includes(q));
   if(!S.jobs.length){$("jobList").innerHTML=`<div class="panel muted" style="text-align:center">${S.loaded.jobs?"No jobs yet."+(isMgr()?" Tap <b>+ New job</b>.":""):"Loading…"}</div>`;return}
   let h="";
-  for(const st of STATUSES){const js=list.filter(j=>(j.status||"Planned")===st).sort((a,b)=>String(a.code).localeCompare(b.code));if(!js.length)continue;
+  for(const st of STATUSES){const js=list.filter(j=>(j.status||"Planned")===st).sort(st==="Done"?(a,b)=>String(b.code).localeCompare(a.code):byPrio);if(!js.length)continue;
     if(st==="Done"&&!q){h+=`<details><summary class="grp">Done (${js.length})</summary><div class="cards">${js.map(card).join("")}</div></details>`;continue}
     h+=`<div class="grp">${st} (${js.length})</div><div class="cards">${js.map(card).join("")}</div>`}
   $("jobList").innerHTML=h||`<div class="muted">No matches.</div>`;
   bindOpen($("jobList"));
 }
 function card(j){const h=jobHrs(j.id),e=expHrs(j.id),pc=e?Math.min(100,h/e*100):0;const steps=(j.plan||[]),dn=steps.filter(s=>s.done).length;
-  return`<button class="card ${esc(j.status||"Planned").replace(/ /g,"")}" data-open="${esc(j.id)}"><span class="code">${esc(j.code)}</span><span class="t">${esc(j.title)}</span>
+  return`<button class="card ${esc(j.status||"Planned").replace(/ /g,"")}" data-open="${esc(j.id)}"><span class="m" style="color:inherit"><span class="code">${esc(j.code)}</span>${prioPill(j)}</span><span class="t">${esc(j.title)}</span>
   <span class="m"><span>${esc(j.site||j.client||"")}</span><span>${(j.crew||[]).map(esc).join(", ")}</span></span>
   <span class="m"><span>${hf(h)}${e?" / "+hf(e):""} h</span><span>${steps.length?`Plan ${dn}/${steps.length}`:""}</span></span>
   ${e?`<span class="bar ${h>e?"over":""}"><i style="width:${pc}%"></i></span>`:""}
-  ${j.start||j.end?`<span class="m"><span>${fmtD(j.start)}${j.end?" → "+fmtD(j.end):""}</span></span>`:""}</button>`}
+  ${j.end?`<span class="m"><span>Finish by ${fmtD(j.end)} ${j.dueTime?fmtT(dueAt(j).toISOString()):""}</span><span>${j.start?"from "+fmtD(j.start):""}</span></span>`:j.start?`<span class="m"><span>From ${fmtD(j.start)}</span></span>`:""}</button>`}
 
 /* ---------- JOB SHEET ---------- */
 function openJob(id){S.open=id;S.dirty=false;renderSheet()}
@@ -420,7 +447,7 @@ function renderSheet(){
   const mp=mapsUrl(j),o=myOpen();
   const old=document.querySelector("#sheetRoot .sheet"),keep=old&&S.lastOpen===S.open?old.scrollTop:0;S.lastOpen=S.open;
   $("sheetRoot").innerHTML=`<div class="scrim" id="scrim"></div><aside class="sheet" role="dialog" aria-label="Job card">
-  <div class="shead"><div><div class="code">${esc(j.code)}</div><h2>${isNew?"New job":esc(j.title)}</h2>${isNew?"":`<span class="pill">${esc(j.status)}</span>`}</div><button class="btn small" id="xS">Close</button></div>
+  <div class="shead"><div><div class="code">${esc(j.code)}</div><h2>${isNew?"New job":esc(j.title)}</h2>${isNew?"":`<span class="pill">${esc(j.status)}</span> ${prioPill(j)}${prioOf(j).why?` <span class="muted small">${esc(prioOf(j).why)}</span>`:""}`}</div><button class="btn small" id="xS">Close</button></div>
   ${isNew?"":`<div class="row">
     ${j.contactPhone?`<a class="btn" href="tel:${esc(j.contactPhone.replace(/[^\d+]/g,""))}">📞 ${esc(j.contactName||"Call site")}</a>`:""}
     ${mp?`<a class="btn" href="${esc(mp)}" target="_blank" rel="noopener">🗺 Map</a>`:""}
@@ -448,7 +475,9 @@ function renderSheet(){
     <label class="f">Contact phone<input name="contactPhone" type="tel" value="${esc(j.contactPhone)}" ${ro}></label>
     <label class="f">Status<select name="status" ${ro}>${STATUSES.map(s=>`<option ${s===(j.status||"Planned")?"selected":""}>${s}</option>`).join("")}</select></label>
     <label class="f">Start<input name="start" type="date" value="${esc(j.start)}" ${ro}></label>
-    <label class="f">Finish<input name="end" type="date" value="${esc(j.end)}" ${ro}></label>
+    <label class="f">Finish by (date)<input name="end" type="date" value="${esc(j.end)}" ${ro}></label>
+    <label class="f">Finish by (time)<input name="dueTime" type="time" value="${esc(j.dueTime||"")}" placeholder="15:30" ${ro}></label>
+    <label class="f">Priority<select name="prioSet" ${ro}>${[["auto","Auto (from time available)"],["Urgent","Urgent"],["High","High"],["Normal","Normal"],["Low","Low"]].map(([v,l])=>`<option value="${v}" ${(j.prioSet||"auto")===v?"selected":""}>${l}</option>`).join("")}</select></label>
     <div class="f full"><span>Crew</span><div class="row" style="gap:12px;padding-top:4px">${people().map(p=>`<label style="display:flex;gap:6px;align-items:center;font-size:14px;text-transform:none;font-weight:400;color:var(--fg)"><input type="checkbox" name="crew" value="${esc(p)}" ${(j.crew||[]).includes(p)?"checked":""} ${ro}>${esc(p)}</label>`).join("")}</div></div>
     <label class="f full">Notes / scope<textarea name="notes" rows="3" ${ro}>${esc(j.notes)}</textarea></label>
     <label class="f">Site GPS (lat, lng)<input name="ll" value="${hasLoc(j)?j.lat+", "+j.lng:""}" placeholder="Paste a Google Maps link or lat, lng" ${ro}></label>
@@ -482,7 +511,7 @@ function renderSheet(){
     const ll=parseLatLng(f.elements.ll.value);if(f.elements.ll.value.trim()&&!ll)return toast("Couldn't read that location. Paste lat, lng like -23.85, 151.25");
     const now=new Date().toISOString();
     const b={code:j.code,business:BIZ,title:f.elements.title.value.trim(),client:f.elements.client.value.trim(),site:f.elements.site.value.trim()||f.elements.title.value.trim(),address:f.elements.address.value.trim(),contactName:f.elements.contactName.value.trim(),contactPhone:f.elements.contactPhone.value.trim(),
-      status:f.elements.status.value,start:f.elements.start.value,end:f.elements.end.value,crew:[...f.querySelectorAll("[name=crew]:checked")].map(x=>x.value),notes:f.elements.notes.value.trim(),
+      status:f.elements.status.value,start:f.elements.start.value,end:f.elements.end.value,dueTime:f.elements.dueTime.value,prioSet:f.elements.prioSet.value,crew:[...f.querySelectorAll("[name=crew]:checked")].map(x=>x.value),notes:f.elements.notes.value.trim(),
       lat:ll?ll.lat:null,lng:ll?ll.lng:null,radius:+f.elements.radius.value||300,updatedAt:now};
     const pr={expectedHrs:r2(f.elements.expectedHrs.value),pricing:f.elements.pricing.value,quote:r2(f.elements.quote.value),chargeRate:r2(f.elements.chargeRate.value),markup:r2(f.elements.markup.value),jobCode:j.code};
     try{let id=j.id;if(isNew){b.createdAt=now;b.plan=[];const ref=db.collection("jobs").doc(j.code.toLowerCase());id=ref.id;await ref.set(b);S.open=id;toast("Job created")}else{await db.doc("jobs/"+id).set(b,{merge:true});toast("Saved")}
