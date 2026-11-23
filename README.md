@@ -1,6 +1,6 @@
 # TWS Job Board
 
-Crew app for Total Welding Solutions: clock on/off with GPS, job cards (site contact, expected hours, plan, consumables), week calendar, and a manager tab.
+Crew app for Total Welding Solutions: clock on/off with GPS, job cards (site contact, plan, consumables), week calendar, and under More: tickets & licence expiry reminders, repairs, to-buy list, ideas, and the manager tab (hours, $, expected hours, timesheets, crew access).
 
 - Live at https://totalwelding.github.io/tws-job-board/
 - Sign-in: Google. New crew sign in, then a manager lets them in under **Manager → Crew access**. Owner: luke@totalwelding.com.au.
@@ -16,16 +16,20 @@ Crew app for Total Welding Solutions: clock on/off with GPS, job cards (site con
 
 ## Who sees what
 - Crew: jobs, plan, hours, calendar, consumables and their costs.
-- Managers only (enforced by the rules): `money/*` (quotes, charge rates, labour cost), crew access, fixing timesheets.
+- Managers only (enforced by the rules): `money/*` (expected hours, quotes, charge rates, labour cost), crew access, fixing timesheets.
 
 ## Data shape (for the owner dashboard)
 All dates are `YYYY-MM-DD` (Brisbane local). Times are ISO UTC. Money is $ ex GST as numbers. Every record has `business: "TWS"`, `jobCode` (e.g. `TWS-0001`) and `site`.
 
 | Collection | Fields |
 |---|---|
-| `jobs/{tws-0001}` | code, title, client, site, address, contactName, contactPhone, status (Active/Planned/On hold/Done), start, end, expectedHrs, crew[], plan[{t,done,by,at}], lat, lng, radius, notes |
+| `jobs/{tws-0001}` | code, title, client, site, address, contactName, contactPhone, status (Active/Planned/On hold/Done), start, end, crew[], plan[{t,done,by,at}], lat, lng, radius, notes |
 | `shifts/{id}` | date, who, email, jobId, jobCode, site, on, off, breakMin, hours, onLoc/offLoc {lat,lng,acc,dist,onSite}, note |
 | `consumables/{id}` | date, jobId, jobCode, site, item, qty, unit, cost, who |
 | `calendar/{date_who_job}` | date, who, jobId, jobCode, site, hrs (planned), note |
 | `totals/{date}` | **dashboard reads this**: hours, hoursByJob{code:h}, hoursByWho{name:h}, consumables, consumablesByJob{code:$}, jobs{code:site}, shifts |
-| `money/{jobId}` | managers: pricing (fixed/hourly), quote, chargeRate, markup. `money/_rates`: labourCost, chargeRate |
+| `tickets/{id}` | who, email (blank = company), type, expiry, remind (days), num, note |
+| `ideas/{id}` | title, cat, detail, jobId, jobCode, who, at, status (new/trying/adopted/no), votes[], reply |
+| `repairs/{id}` | item, problem, down (can't use), jobId, jobCode, who, at, status (reported/fixing/parts/fixed/gone), fixNote, cost |
+| `tobuy/{id}` | item, qty, unit, kind (consumable/tool/material/ppe), urgency (today/week/whenever), jobId, jobCode, supplier, who, at, status (needed/ordered/got), repairId |
+| `money/{jobId}` | managers: expectedHrs, pricing (fixed/hourly), quote, chargeRate, markup. `money/_rates`: labourCost, chargeRate |

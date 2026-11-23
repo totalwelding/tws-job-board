@@ -33,9 +33,15 @@ header{position:sticky;top:0;z-index:5;background:#16202b;color:#fff;padding-top
 .who{font-size:12px;color:#c9d4de;text-align:right}
 .who a{color:#fff}
 nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--panel);border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom,0px)}
-nav.tabs button{flex:1;background:none;border:0;padding:9px 4px 8px;font:600 12px var(--body);color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+nav.tabs button{flex:1;min-width:0;background:none;border:0;padding:9px 2px 8px;font:600 11px var(--body);color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
 nav.tabs button span{font-size:19px;line-height:1}
 nav.tabs button[aria-selected="true"]{color:var(--accent)}
+nav.tabs button{position:relative}
+.nb{position:absolute;top:4px;left:calc(50% + 8px);min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font:700 10px/17px var(--body);font-style:normal}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 14px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:4px;position:relative}
+.tile .ic{font-size:26px}.tile b{font:700 19px var(--display);text-transform:uppercase;letter-spacing:.03em}
+.tile .nb{top:10px;left:auto;right:10px}
 main{padding-block:14px 30px}
 h2.v{font:700 22px var(--display);text-transform:uppercase;letter-spacing:.03em;margin:4px 0 10px}
 h3{font:600 17px var(--display);text-transform:uppercase;letter-spacing:.04em;margin:0}
@@ -113,6 +119,12 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .shead{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .shead h2{font:700 28px/1.05 var(--display);margin:2px 0 0;text-transform:uppercase}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:8px;z-index:30;font-weight:500;max-width:90vw}
+/* tickets */
+.tk{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.tk > div{flex:1;min-width:0}
+.tk .ex{font:500 12px var(--mono);white-space:nowrap}
+.due{display:block;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-weight:500;background:var(--amber-bg);color:var(--amber)}
+.due.bad{background:var(--bad-bg);color:var(--bad)}
 /* gate */
 #gate{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:30px;text-align:center;background:#16202b;color:#fff}
 #gate img{width:96px;height:96px;border-radius:20px}
@@ -163,6 +175,16 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
     <div class="cal" id="calGrid"></div>
   </section>
 
+  <!-- TICKETS -->
+  <section id="v-tix" hidden></section>
+
+  <!-- IDEAS -->
+  <section id="v-ideas" hidden></section>
+
+  <section id="v-fix" hidden></section>
+  <section id="v-buy" hidden></section>
+  <section id="v-more" hidden></section>
+
   <!-- MANAGER -->
   <section id="v-mgr" hidden></section>
 </main>
@@ -171,7 +193,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
   <button data-v="clock" aria-selected="true"><span>⏱</span>Clock</button>
   <button data-v="jobs" aria-selected="false"><span>🔧</span>Jobs</button>
   <button data-v="cal" aria-selected="false"><span>📅</span>Calendar</button>
-  <button data-v="mgr" aria-selected="false" class="mgr"><span>📊</span>Manager</button>
+  <button data-v="more" aria-selected="false"><span>☰</span>More<i id="moreBadge" class="nb" hidden></i></button>
 </nav>
 </div>
 
@@ -216,7 +238,7 @@ function mapsUrl(j){if(hasLoc(j))return`https://www.google.com/maps/search/?api=
 firebase.initializeApp(window.FIREBASE_CONFIG);
 const auth=firebase.auth(),db=firebase.firestore();
 try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
-const S={user:null,me:null,role:null,access:{},reqs:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
+const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],fix:[],buy:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
   view:"clock",calWeek:monday(new Date()),mgrWeek:monday(new Date()),open:null,pick:null,loaded:{},seeded:false};
 let subs=[];
 const myEmail=()=>(S.user&&S.user.email||"").toLowerCase();
@@ -227,6 +249,7 @@ const jobName=id=>{const j=job(id);return j?`${j.code} ${j.title}`:"(deleted job
 function people(){const n=Object.values(S.access).map(m=>m.name).filter(Boolean);const all=[...new Set([...DEFAULT_CREW,...n])];return all}
 const openJobs=()=>S.jobs.filter(j=>j.status!=="Done").sort((a,b)=>STATUSES.indexOf(a.status)-STATUSES.indexOf(b.status)||String(a.code).localeCompare(b.code));
 const jobHrs=id=>S.shifts.filter(s=>s.jobId===id&&s.hours!=null).reduce((a,s)=>a+(+s.hours||0),0);
+const expHrs=id=>+((S.money[id]||{}).expectedHrs)||0;
 const jobCons=id=>S.cons.filter(c=>c.jobId===id).reduce((a,c)=>a+(+c.cost||0),0);
 const myOpen=()=>S.shifts.find(s=>s.email===myEmail()&&!s.off);
 function nextCode(){let m=0;S.jobs.forEach(j=>{const n=parseInt(String(j.code||"").replace(/\D/g,""),10);if(n>m)m=n});return"TWS-"+String(m+1).padStart(4,"0")}
@@ -247,12 +270,13 @@ async function recompute(date){
 }
 
 /* ============ views ============ */
-function show(v){if(v==="mgr"&&!isMgr())v="clock";S.view=v;["clock","jobs","cal","mgr"].forEach(k=>$("v-"+k).hidden=k!==v);
-  document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));if(S.me)try{localStorage.setItem("tws-view",v)}catch(e){}render();window.scrollTo(0,0)}
+function show(v){if(v==="mgr"&&!isMgr())v="clock";S.view=v;["clock","jobs","cal","tix","ideas","fix","buy","more","mgr"].forEach(k=>$("v-"+k).hidden=k!==v);
+  const nv=["clock","jobs","cal"].includes(v)?v:"more";document.querySelectorAll("nav.tabs button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===nv));if(S.me)try{localStorage.setItem("tws-view",v)}catch(e){}render();window.scrollTo(0,0)}
 document.querySelectorAll("nav.tabs button").forEach(b=>b.onclick=()=>show(b.dataset.v));
 function render(){
   document.querySelectorAll(".mgr").forEach(e=>e.hidden=!isMgr());
-  if(S.view==="clock")renderClock();else if(S.view==="jobs")renderJobs();else if(S.view==="cal")renderCal();else renderMgr();
+  const mb=moreCounts(),tot=mb.tix+mb.fix+mb.buy+mb.req;$("moreBadge").hidden=!tot;$("moreBadge").textContent=tot;
+  if(S.view==="clock")renderClock();else if(S.view==="jobs")renderJobs();else if(S.view==="cal")renderCal();else if(S.view==="tix")renderTix();else if(S.view==="ideas")renderIdeas();else if(S.view==="fix")renderFix();else if(S.view==="buy")renderBuy();else if(S.view==="more")renderMore();else renderMgr();
   const ae=document.activeElement,inSheet=ae&&ae.closest&&ae.closest("#sheetRoot")&&/INPUT|SELECT|TEXTAREA/.test(ae.tagName);
   if(S.open!==null&&!S.dirty&&!inSheet)renderSheet();
 }
@@ -266,7 +290,7 @@ function renderClock(){
   const wk=monday(new Date()),a=ymd(wk),b=ymd(addDays(wk,6));
   const mine=S.shifts.filter(s=>s.email===myEmail()&&s.date>=a&&s.date<=b).sort((x,y)=>String(y.on).localeCompare(x.on));
   const tot=mine.reduce((t,s)=>t+(+s.hours||0),0);
-  let h="";
+  let h=dueBanner(S.tix.filter(x=>x.who===S.me));
   if(o){const j=job(o.jobId)||{};
     const long=(Date.now()-new Date(o.on))/36e5>14;
     h+=`<div class="panel clock"><span class="pill ok" style="align-self:center">ON THE CLOCK</span>
@@ -346,7 +370,7 @@ function renderJobs(){
   $("jobList").innerHTML=h||`<div class="muted">No matches.</div>`;
   bindOpen($("jobList"));
 }
-function card(j){const h=jobHrs(j.id),e=+j.expectedHrs||0,pc=e?Math.min(100,h/e*100):0;const steps=(j.plan||[]),dn=steps.filter(s=>s.done).length;
+function card(j){const h=jobHrs(j.id),e=expHrs(j.id),pc=e?Math.min(100,h/e*100):0;const steps=(j.plan||[]),dn=steps.filter(s=>s.done).length;
   return`<button class="card ${esc(j.status||"Planned").replace(/ /g,"")}" data-open="${esc(j.id)}"><span class="code">${esc(j.code)}</span><span class="t">${esc(j.title)}</span>
   <span class="m"><span>${esc(j.site||j.client||"")}</span><span>${(j.crew||[]).map(esc).join(", ")}</span></span>
   <span class="m"><span>${hf(h)}${e?" / "+hf(e):""} h</span><span>${steps.length?`Plan ${dn}/${steps.length}`:""}</span></span>
@@ -363,7 +387,7 @@ function renderSheet(){
   const mg=isMgr(),ro=mg?"":"disabled";
   const sh=isNew?[]:S.shifts.filter(s=>s.jobId===j.id).sort((a,b)=>String(b.on).localeCompare(a.on));
   const co=isNew?[]:S.cons.filter(c=>c.jobId===j.id).sort((a,b)=>String(b.createdAt).localeCompare(a.createdAt));
-  const h=jobHrs(j.id),e=+j.expectedHrs||0,cs=jobCons(j.id);
+  const h=jobHrs(j.id),e=mg?expHrs(j.id):0,cs=jobCons(j.id);
   const m=S.money[j.id]||{},lab=h*(+S.rates.labourCost||0),rev=m.pricing==="hourly"?h*(+m.chargeRate||+S.rates.chargeRate||0)+cs*(1+(+m.markup||0)/100):(+m.quote||0);
   const mp=mapsUrl(j),o=myOpen();
   const old=document.querySelector("#sheetRoot .sheet"),keep=old&&S.lastOpen===S.open?old.scrollTop:0;S.lastOpen=S.open;
@@ -373,8 +397,8 @@ function renderSheet(){
     ${j.contactPhone?`<a class="btn" href="tel:${esc(j.contactPhone.replace(/[^\d+]/g,""))}">📞 ${esc(j.contactName||"Call site")}</a>`:""}
     ${mp?`<a class="btn" href="${esc(mp)}" target="_blank" rel="noopener">🗺 Map</a>`:""}
     ${!o&&j.status!=="Done"?`<button class="btn go" id="sOn">Clock on here</button>`:""}</div>
-  <div class="stats"><div class="stat"><b>${hf(h)}</b><span>Hours</span></div><div class="stat"><b>${e?hf(e):"–"}</b><span>Expected</span></div>
-    <div class="stat ${e&&h>e?"bad":""}"><b>${e?hf(e-h):"–"}</b><span>Left</span></div><div class="stat"><b>${money(cs)}</b><span>Consumables</span></div></div>
+  <div class="stats" ${mg?"":'style="grid-template-columns:1fr 1fr"'}><div class="stat"><b>${hf(h)}</b><span>Hours</span></div>${mg?`<div class="stat"><b>${e?hf(e):"–"}</b><span>Expected</span></div>
+    <div class="stat ${e&&h>e?"bad":""}"><b>${e?hf(e-h):"–"}</b><span>Left</span></div>`:""}<div class="stat"><b>${money(cs)}</b><span>Consumables</span></div></div>
   ${e?`<div class="bar ${h>e?"over":""}"><i style="width:${Math.min(100,h/e*100)}%"></i></div>`:""}
   ${mg?`<div class="stats"><div class="stat"><b>${money(rev)}</b><span>${m.pricing==="hourly"?"Billable":"Quote"}</span></div><div class="stat"><b>${money(lab)}</b><span>Labour cost</span></div>
     <div class="stat"><b>${money(lab+cs)}</b><span>Total cost</span></div><div class="stat ${rev-lab-cs>=0?"good":"bad"}"><b>${money(rev-lab-cs)}</b><span>Profit</span></div></div>
@@ -394,7 +418,6 @@ function renderSheet(){
     <label class="f">Site contact<input name="contactName" value="${esc(j.contactName)}" ${ro}></label>
     <label class="f">Contact phone<input name="contactPhone" type="tel" value="${esc(j.contactPhone)}" ${ro}></label>
     <label class="f">Status<select name="status" ${ro}>${STATUSES.map(s=>`<option ${s===(j.status||"Planned")?"selected":""}>${s}</option>`).join("")}</select></label>
-    <label class="f">Expected hours<input name="expectedHrs" type="number" step="0.5" min="0" value="${esc(j.expectedHrs||"")}" inputmode="decimal" ${ro}></label>
     <label class="f">Start<input name="start" type="date" value="${esc(j.start)}" ${ro}></label>
     <label class="f">Finish<input name="end" type="date" value="${esc(j.end)}" ${ro}></label>
     <div class="f full"><span>Crew</span><div class="row" style="gap:12px;padding-top:4px">${people().map(p=>`<label style="display:flex;gap:6px;align-items:center;font-size:14px;text-transform:none;font-weight:400;color:var(--fg)"><input type="checkbox" name="crew" value="${esc(p)}" ${(j.crew||[]).includes(p)?"checked":""} ${ro}>${esc(p)}</label>`).join("")}</div></div>
@@ -403,6 +426,7 @@ function renderSheet(){
     <label class="f">On-site radius (m)<input name="radius" type="number" min="50" step="50" value="${esc(j.radius||300)}" ${ro}></label>
     ${mg?`<div class="full row"><button class="btn small" type="button" id="hereBtn">📍 Use where I am now</button></div>
     <div class="full grp" style="margin:6px 0 0">Managers only</div>
+    <label class="f">Expected hours<input name="expectedHrs" type="number" step="0.5" min="0" value="${esc(m.expectedHrs||"")}" inputmode="decimal"></label>
     <label class="f">Pricing<select name="pricing"><option value="fixed" ${m.pricing!=="hourly"?"selected":""}>Fixed quote</option><option value="hourly" ${m.pricing==="hourly"?"selected":""}>Hourly (charge-up)</option></select></label>
     <label class="f">Quote $ ex GST<input name="quote" type="number" step="1" min="0" value="${esc(m.quote||"")}"></label>
     <label class="f">Charge rate $/h (blank = default)<input name="chargeRate" type="number" step="0.5" min="0" value="${esc(m.chargeRate||"")}"></label>
@@ -429,9 +453,9 @@ function renderSheet(){
     const ll=parseLatLng(f.elements.ll.value);if(f.elements.ll.value.trim()&&!ll)return toast("Couldn't read that location. Paste lat, lng like -23.85, 151.25");
     const now=new Date().toISOString();
     const b={code:j.code,business:BIZ,title:f.elements.title.value.trim(),client:f.elements.client.value.trim(),site:f.elements.site.value.trim()||f.elements.title.value.trim(),address:f.elements.address.value.trim(),contactName:f.elements.contactName.value.trim(),contactPhone:f.elements.contactPhone.value.trim(),
-      status:f.elements.status.value,expectedHrs:r2(f.elements.expectedHrs.value),start:f.elements.start.value,end:f.elements.end.value,crew:[...f.querySelectorAll("[name=crew]:checked")].map(x=>x.value),notes:f.elements.notes.value.trim(),
+      status:f.elements.status.value,start:f.elements.start.value,end:f.elements.end.value,crew:[...f.querySelectorAll("[name=crew]:checked")].map(x=>x.value),notes:f.elements.notes.value.trim(),
       lat:ll?ll.lat:null,lng:ll?ll.lng:null,radius:+f.elements.radius.value||300,updatedAt:now};
-    const pr={pricing:f.elements.pricing.value,quote:r2(f.elements.quote.value),chargeRate:r2(f.elements.chargeRate.value),markup:r2(f.elements.markup.value),jobCode:j.code};
+    const pr={expectedHrs:r2(f.elements.expectedHrs.value),pricing:f.elements.pricing.value,quote:r2(f.elements.quote.value),chargeRate:r2(f.elements.chargeRate.value),markup:r2(f.elements.markup.value),jobCode:j.code};
     try{let id=j.id;if(isNew){b.createdAt=now;b.plan=[];const ref=db.collection("jobs").doc(j.code.toLowerCase());id=ref.id;await ref.set(b);S.open=id;toast("Job created")}else{await db.doc("jobs/"+id).set(b,{merge:true});toast("Saved")}
       await db.doc("money/"+id).set(pr);S.dirty=false;renderSheet()}catch(err){fail(err)}};
   const dj=$("delJ");if(dj)dj.onclick=async()=>{if(dj.dataset.c!=="1"){dj.dataset.c="1";dj.textContent="Tap again to delete";return}
@@ -472,6 +496,145 @@ function calSheet(d,p){
       await bt.commit();toast("Planned");setTimeout(()=>calSheet(d,p),300)}catch(err){fail(err)}};
 }
 
+/* ---------- TICKETS ---------- */
+const TIX=["Driver's licence","HR truck licence","MR truck licence","High risk: dogging","High risk: rigging","High risk: forklift (LF)","High risk: EWP (WP)","High risk: crane","White card","First aid","CPR","Working at heights","Confined space","Welding certification","Gas test atmospheres","Site induction (GPC)","Vehicle rego","Vehicle insurance","Public liability","WorkCover","Plant inspection"];
+const COMPANY="TWS (company)";
+const daysLeft=d=>Math.round((new Date(d+"T00:00:00")-new Date(ymd(new Date())+"T00:00:00"))/864e5);
+function dueTxt(n){return n<0?`expired ${-n} day${n===-1?"":"s"} ago`:n===0?"expires today":`expires in ${n} day${n===1?"":"s"}`}
+function dueBanner(list,all){const l=list.filter(x=>x.expiry&&daysLeft(x.expiry)<=(+x.remind||30)).sort((a,b)=>String(a.expiry).localeCompare(b.expiry));if(!l.length)return"";
+  const bad=l.some(x=>daysLeft(x.expiry)<0);
+  return`<a href="#" class="due ${bad?"bad":""}" data-go="tix">🪪 ${l.slice(0,4).map(x=>`${all?esc(x.who)+": ":""}${esc(x.type)} ${dueTxt(daysLeft(x.expiry))}`).join("<br>")}${l.length>4?`<br>+${l.length-4} more`:""}</a>`}
+document.addEventListener("click",e=>{const a=e.target.closest("[data-go]");if(!a)return;e.preventDefault();show(a.dataset.go)});
+function renderTix(){
+  const el=$("v-tix");if(el.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
+  const mg=isMgr(),who=mg?[...people(),COMPANY]:[S.me];
+  const by={};S.tix.forEach(x=>(by[x.who]=by[x.who]||[]).push(x));
+  const order=[...new Set([...who,...Object.keys(by)])].filter(w=>by[w]);
+  const pill=x=>{if(!x.expiry)return`<span class="pill">no expiry</span>`;const n=daysLeft(x.expiry);return`<span class="pill ${n<0?"bad":n<=(+x.remind||30)?"warn":"ok"}">${n<0?"Expired":n<=(+x.remind||30)?n+" days":"OK"}</span>`};
+  el.innerHTML=`<h2 class="v">Tickets &amp; licences</h2>`+dueBanner(S.tix,mg)+
+  `<div class="panel"><h3>Add a ticket</h3><form id="tF" class="grid2">
+    ${mg?`<label class="f">Whose<select name="who">${who.map(p=>`<option>${esc(p)}</option>`).join("")}</select></label>`:""}
+    <label class="f ${mg?"":"full"}">Ticket<input name="type" list="tixList" required placeholder="e.g. HR truck licence"></label>
+    <label class="f">Expiry date<input name="expiry" type="date"></label>
+    <label class="f">Remind me<select name="remind"><option value="30">30 days before</option><option value="60">60 days before</option><option value="90">90 days before</option><option value="14">14 days before</option></select></label>
+    <label class="f">Number / class (optional)<input name="num"></label>
+    <label class="f">Note<input name="note" placeholder="Where the card is, who issued it…"></label>
+    <div class="full"><button class="btn primary" type="submit">Save ticket</button></div>
+  </form><datalist id="tixList">${TIX.map(x=>`<option value="${esc(x)}">`).join("")}</datalist></div>`+
+  (order.length?order.map(w=>`<div class="panel"><h3>${esc(w)}</h3>${by[w].sort((a,b)=>String(a.expiry||"9999").localeCompare(b.expiry||"9999")).map(x=>`<div class="tk"><div><b>${esc(x.type)}</b>${x.num?` <span class="muted small">${esc(x.num)}</span>`:""}<br><span class="ex ${x.expiry&&daysLeft(x.expiry)<0?"":"muted"}">${x.expiry?fmtD(x.expiry)+" · "+dueTxt(daysLeft(x.expiry)):"No expiry"}</span>${x.note?`<br><span class="muted small">${esc(x.note)}</span>`:""}</div>${pill(x)}<button class="btn small" data-ren="${esc(x.id)}">Renewed</button><button class="btn small link danger" data-delt="${esc(x.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>`).join("")
+   :`<div class="panel muted">No tickets yet. Add licences and tickets above and the app will warn ${mg?"you and them":"you"} before they expire.</div>`);
+  $("tF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements;const w=mg?f.who.value:S.me;
+    const em=w===S.me?myEmail():w===COMPANY?"":(Object.keys(S.access).find(k=>S.access[k].name===w)||"");
+    const d={business:BIZ,who:w,email:em,type:f.type.value.trim(),expiry:f.expiry.value,remind:+f.remind.value||30,num:f.num.value.trim(),note:f.note.value.trim(),by:S.me,updatedAt:new Date().toISOString()};
+    if(!d.type)return;try{await db.collection("tickets").add(d);e.target.reset();toast("Ticket saved")}catch(err){fail(err)}};
+  el.querySelectorAll("[data-delt]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc("tickets/"+b.dataset.delt).delete()}catch(err){fail(err)}});
+  el.querySelectorAll("[data-ren]").forEach(b=>b.onclick=()=>{const x=S.tix.find(t=>t.id===b.dataset.ren);if(!x)return;const row=b.closest(".tk");
+    row.innerHTML=`<div><b>${esc(x.type)}</b> · new expiry</div><input type="date" class="in" style="width:auto" id="rnD"><button class="btn small primary" id="rnS">Save</button>`;
+    $("rnS").onclick=async()=>{const v=$("rnD").value;if(!v)return toast("Pick the new expiry date");try{await db.doc("tickets/"+x.id).update({expiry:v,updatedAt:new Date().toISOString(),by:S.me});toast("Updated")}catch(err){fail(err)}}});
+}
+
+/* ---------- IDEAS ---------- */
+const ICATS=["Faster / easier","Safety","Tools & gear","Saves money","Get more work","Other"];
+const ISTAT={new:["New",""],trying:["Trying it","warn"],adopted:["Adopted","ok"],no:["Not now","bad"]};
+function renderIdeas(){
+  const el=$("v-ideas");if(el.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
+  const mg=isMgr();
+  const list=[...S.ideas].sort((a,b)=>(a.status==="no")-(b.status==="no")||(b.votes||[]).length-(a.votes||[]).length||String(b.at).localeCompare(a.at));
+  el.innerHTML=`<h2 class="v">Ideas</h2><p class="muted" style="margin:-4px 0 10px">A better or faster way to do something? Put it here. Thumbs-up the ones you like.</p>
+  <div class="panel"><form id="iF" class="grid2">
+    <label class="f full">Idea<input name="title" required placeholder="e.g. Pre-cut gussets in batches on the band saw"></label>
+    <label class="f">Type<select name="cat">${ICATS.map(c=>`<option>${c}</option>`).join("")}</select></label>
+    <label class="f">Job (optional)<select name="job"><option value="">–</option>${openJobs().map(j=>`<option value="${esc(j.id)}">${esc(j.code+" · "+j.title)}</option>`).join("")}</select></label>
+    <label class="f full">How it would work<textarea name="detail" rows="2"></textarea></label>
+    <div class="full"><button class="btn primary" type="submit">Post idea</button></div></form></div>`+
+  (list.length?list.map(x=>{const v=x.votes||[],mine=v.includes(S.me),st=ISTAT[x.status||"new"];
+    return`<div class="panel"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="flex:1;min-width:0"><b style="font-size:15px">${esc(x.title)}</b><br><span class="muted small">${esc(x.cat)} · ${esc(x.who)} · ${fmtD(String(x.at).slice(0,10))}${x.jobId&&job(x.jobId)?" · "+esc(job(x.jobId).code):""}</span></div>
+      <button class="btn small ${mine?"primary":""}" data-vote="${esc(x.id)}" aria-pressed="${mine}">👍 ${v.length}</button></div>
+      ${x.detail?`<div style="white-space:pre-wrap">${esc(x.detail)}</div>`:""}
+      <div class="row" style="align-items:center"><span class="pill ${st[1]}">${st[0]}</span>${x.reply?`<span class="small"><b>${esc(x.replyBy||"Luke")}:</b> ${esc(x.reply)}</span>`:""}</div>
+      ${mg?`<div class="row"><select class="in" data-ist="${esc(x.id)}" style="flex:0 1 130px">${Object.entries(ISTAT).map(([k,s])=>`<option value="${k}" ${k===(x.status||"new")?"selected":""}>${s[0]}</option>`).join("")}</select><input class="in" data-irp="${esc(x.id)}" value="${esc(x.reply)}" placeholder="Reply" style="flex:1 1 140px;width:auto"><button class="btn small" data-isv="${esc(x.id)}">Save</button><button class="btn small link danger" data-idel="${esc(x.id)}">✕</button></div>`:""}</div>`}).join("")
+   :`<div class="panel muted">No ideas yet. Be the first.</div>`);
+  $("iF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements;const j=job(f.job.value);
+    const d={business:BIZ,title:f.title.value.trim(),cat:f.cat.value,detail:f.detail.value.trim(),jobId:j?j.id:"",jobCode:j?j.code:"",who:S.me,email:myEmail(),at:new Date().toISOString(),status:"new",votes:[S.me],reply:""};
+    if(!d.title)return;try{await db.collection("ideas").add(d);e.target.reset();toast("Idea posted")}catch(err){fail(err)}};
+  el.querySelectorAll("[data-vote]").forEach(b=>b.onclick=async()=>{const x=S.ideas.find(i=>i.id===b.dataset.vote);if(!x)return;const v=new Set(x.votes||[]);v.has(S.me)?v.delete(S.me):v.add(S.me);
+    try{await db.doc("ideas/"+x.id).update({votes:[...v]})}catch(err){fail(err)}});
+  el.querySelectorAll("[data-isv]").forEach(b=>b.onclick=async()=>{const id=b.dataset.isv;try{await db.doc("ideas/"+id).update({status:el.querySelector(`[data-ist="${CSS.escape(id)}"]`).value,reply:el.querySelector(`[data-irp="${CSS.escape(id)}"]`).value.trim(),replyBy:S.me,updatedAt:new Date().toISOString()});toast("Saved")}catch(err){fail(err)}});
+  el.querySelectorAll("[data-idel]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc("ideas/"+b.dataset.idel).delete()}catch(err){fail(err)}});
+}
+
+/* ---------- MORE ---------- */
+function moreCounts(){const due=S.tix.filter(x=>x.expiry&&daysLeft(x.expiry)<=(+x.remind||30)&&(isMgr()||x.who===S.me)).length;
+  return{tix:due,fix:S.fix.filter(x=>x.status!=="fixed"&&x.status!=="gone").length,buy:S.buy.filter(x=>x.status!=="got").length,ideas:S.ideas.filter(x=>(x.status||"new")==="new").length,req:isMgr()?S.reqs.length:0}}
+function renderMore(){const c=moreCounts();
+  const T=[["tix","🪪","Tickets","Licences & expiry reminders",c.tix],["fix","🛠","Repairs","Broken tools & gear",c.fix],["buy","🛒","To buy","Consumables & tools needed",c.buy],["ideas","💡","Ideas","Better ways to do things",isMgr()?c.ideas:0]];
+  if(isMgr())T.push(["mgr","📊","Manager","Hours, $, timesheets, crew",c.req]);
+  $("v-more").innerHTML=`<div class="tiles">${T.map(([v,ic,n,d,k])=>`<button class="tile" data-go="${v}"><span class="ic">${ic}</span><b>${n}</b><span class="muted small">${d}</span>${k?`<i class="nb">${k}</i>`:""}</button>`).join("")}</div>`}
+
+/* ---------- shared little list helpers ---------- */
+function selOpts(arr,cur){return arr.map(([k,l])=>`<option value="${k}" ${k===cur?"selected":""}>${l}</option>`).join("")}
+function jobOpts(){return`<option value="">–</option>`+openJobs().map(j=>`<option value="${esc(j.id)}">${esc(j.code+" · "+j.title)}</option>`).join("")}
+async function setField(col,id,d){try{await db.doc(col+"/"+id).update({...d,updatedAt:new Date().toISOString(),updatedBy:S.me})}catch(err){fail(err)}}
+function bindDel(el,col){el.querySelectorAll(`[data-del-${col}]`).forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc(col+"/"+b.getAttribute("data-del-"+col)).delete()}catch(err){fail(err)}})}
+const busy=el=>el.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName);
+
+/* ---------- REPAIRS ---------- */
+const FSTAT=[["reported","Reported"],["fixing","Being fixed"],["parts","Waiting on parts"],["fixed","Fixed"],["gone","Written off"]];
+const FPILL={reported:"bad",fixing:"warn",parts:"warn",fixed:"ok",gone:""};
+function renderFix(){const el=$("v-fix");if(busy(el))return;
+  const open=S.fix.filter(x=>x.status!=="fixed"&&x.status!=="gone").sort((a,b)=>(b.down?1:0)-(a.down?1:0)||String(a.at).localeCompare(b.at));
+  const done=S.fix.filter(x=>x.status==="fixed"||x.status==="gone").sort((a,b)=>String(b.updatedAt||b.at).localeCompare(a.updatedAt||a.at)).slice(0,20);
+  const row=x=>`<div class="panel"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="flex:1;min-width:0"><b style="font-size:15px">${esc(x.item)}</b>${x.down?` <span class="pill bad">can't use</span>`:""}<br><span class="muted small">${esc(x.who)} · ${fmtD(String(x.at).slice(0,10))}${x.jobCode?" · "+esc(x.jobCode):""}</span></div><span class="pill ${FPILL[x.status]||""}">${(FSTAT.find(s=>s[0]===x.status)||FSTAT[0])[1]}</span></div>
+    ${x.problem?`<div style="white-space:pre-wrap">${esc(x.problem)}</div>`:""}${x.fixNote?`<div class="small"><b>Fix:</b> ${esc(x.fixNote)}${x.cost?` · ${money2(x.cost)}`:""}</div>`:""}
+    <div class="row"><select class="in" data-fst="${esc(x.id)}" style="flex:0 1 160px">${selOpts(FSTAT,x.status)}</select><input class="in" data-fnote="${esc(x.id)}" value="${esc(x.fixNote)}" placeholder="What was done / part needed" style="flex:1 1 150px;width:auto"><input class="in" data-fcost="${esc(x.id)}" type="number" step="0.01" min="0" value="${esc(x.cost||"")}" placeholder="$" style="flex:0 1 80px;width:auto"><button class="btn small" data-fsv="${esc(x.id)}">Save</button>
+    ${x.status!=="fixed"?`<button class="btn small" data-f2b="${esc(x.id)}">🛒 Add part to buy list</button>`:""}${isMgr()?`<button class="btn small link danger" data-del-repairs="${esc(x.id)}">✕</button>`:""}</div></div>`;
+  el.innerHTML=`<h2 class="v">Repairs</h2><div class="panel"><h3>Report broken gear</h3><form id="fF" class="grid2">
+    <label class="f full">Tool / plant<input name="it" required placeholder="e.g. Diesel welder, 9&quot; grinder #2, crane truck remote"></label>
+    <label class="f full">What's wrong<textarea name="problem" rows="2"></textarea></label>
+    <label class="f">Job (optional)<select name="job">${jobOpts()}</select></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:8px;text-transform:none;font-size:14px;color:var(--fg);font-weight:500"><input type="checkbox" name="down" style="width:20px;height:20px">Can't use it until fixed</label>
+    <div class="full"><button class="btn primary" type="submit">Report</button></div></form></div>
+    ${open.length?open.map(row).join(""):`<div class="panel muted">Nothing broken. Nice.</div>`}
+    ${done.length?`<details><summary class="grp">Fixed / written off (${done.length})</summary>${done.map(row).join("")}</details>`:""}`;
+  $("fF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements,j=job(f.job.value);const d={business:BIZ,item:f.it.value.trim(),problem:f.problem.value.trim(),down:f.down.checked,jobId:j?j.id:"",jobCode:j?j.code:"",who:S.me,email:myEmail(),at:new Date().toISOString(),status:"reported",fixNote:"",cost:0};
+    if(!d.item)return;try{await db.collection("repairs").add(d);e.target.reset();toast("Reported")}catch(err){fail(err)}};
+  el.querySelectorAll("[data-fsv]").forEach(b=>b.onclick=()=>{const id=b.dataset.fsv,q=k=>el.querySelector(`[data-${k}="${CSS.escape(id)}"]`).value;const st=q("fst");
+    setField("repairs",id,{status:st,fixNote:q("fnote").trim(),cost:r2(q("fcost")),...(st==="fixed"||st==="gone"?{down:false}:{})}).then(()=>toast("Saved"))});
+  el.querySelectorAll("[data-f2b]").forEach(b=>b.onclick=async()=>{const x=S.fix.find(f=>f.id===b.dataset.f2b);if(!x)return;const part=el.querySelector(`[data-fnote="${CSS.escape(x.id)}"]`).value.trim();
+    try{await db.collection("tobuy").add({business:BIZ,item:(part||"Part")+" for "+x.item,qty:1,unit:"",kind:"tool",urgency:x.down?"today":"week",jobId:x.jobId||"",jobCode:x.jobCode||"",supplier:"",estCost:0,who:S.me,email:myEmail(),at:new Date().toISOString(),status:"needed",repairId:x.id});
+      await setField("repairs",x.id,{...(x.status==="reported"?{status:"parts"}:{}),...(part?{fixNote:part}:{})});toast("Added to To buy")}catch(err){fail(err)}});
+  bindDel(el,"repairs");
+}
+
+/* ---------- TO BUY ---------- */
+const BKIND=[["consumable","Consumable"],["tool","Tool / gear"],["material","Material / steel"],["ppe","PPE"]];
+const BURG=[["today","Need today"],["week","This week"],["whenever","Whenever"]];
+const BSTAT=[["needed","Needed"],["ordered","Ordered"],["got","Got it"]];
+function renderBuy(){const el=$("v-buy");if(busy(el))return;
+  const ord={today:0,week:1,whenever:2};
+  const open=S.buy.filter(x=>x.status!=="got").sort((a,b)=>(ord[a.urgency]??1)-(ord[b.urgency]??1)||String(a.at).localeCompare(b.at));
+  const got=S.buy.filter(x=>x.status==="got").sort((a,b)=>String(b.updatedAt||b.at).localeCompare(a.updatedAt||a.at)).slice(0,25);
+  const row=x=>`<div class="tk"><div><b>${esc(x.item)}</b>${x.qty&&x.qty!==1?` × ${esc(x.qty)}${esc(x.unit?" "+x.unit:"")}`:x.unit?` (${esc(x.unit)})`:""}<br><span class="muted small">${(BKIND.find(k=>k[0]===x.kind)||BKIND[0])[1]} · ${esc(x.who)}${x.jobCode?" · "+esc(x.jobCode):""}${x.supplier?" · "+esc(x.supplier):""}${x.estCost?" · ~"+money(x.estCost):""}</span></div>
+    ${x.status!=="got"?`<span class="pill ${x.urgency==="today"?"bad":x.urgency==="week"?"warn":""}">${(BURG.find(u=>u[0]===x.urgency)||BURG[1])[1]}</span>`:""}
+    <select class="in" data-bst="${esc(x.id)}" style="width:auto;flex:0 0 auto;padding:6px">${selOpts(BSTAT,x.status)}</select>${isMgr()||x.email===myEmail()?`<button class="btn small link danger" data-del-tobuy="${esc(x.id)}">✕</button>`:""}</div>`;
+  const grp={};open.forEach(x=>(grp[x.status]=grp[x.status]||[]).push(x));
+  el.innerHTML=`<h2 class="v">To buy</h2><div class="panel"><h3>Add to the list</h3><form id="bF" class="grid2">
+    <label class="f full">What<input name="it" required placeholder="e.g. 3.2mm 7018 rods, 125mm flap discs, new grinder"></label>
+    <label class="f">Qty<input name="qty" type="number" step="any" min="0" value="1" inputmode="decimal"></label>
+    <label class="f">Unit<input name="unit" placeholder="box, kg, ea"></label>
+    <label class="f">Type<select name="kind">${selOpts(BKIND,"consumable")}</select></label>
+    <label class="f">How soon<select name="urg">${selOpts(BURG,"week")}</select></label>
+    <label class="f">For job (optional)<select name="job">${jobOpts()}</select></label>
+    <label class="f">Supplier (optional)<input name="sup" placeholder="e.g. Global Welding Supplies"></label>
+    <div class="full"><button class="btn primary" type="submit">Add</button></div></form></div>
+    ${open.length?["needed","ordered"].filter(s=>grp[s]).map(s=>`<div class="panel"><h3>${s==="needed"?"Needed":"Ordered"} (${grp[s].length})</h3>${grp[s].map(row).join("")}</div>`).join(""):`<div class="panel muted">Nothing on the list.</div>`}
+    ${got.length?`<details><summary class="grp">Got it (${got.length})</summary><div class="panel">${got.map(row).join("")}</div></details>`:""}`;
+  $("bF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements,j=job(f.job.value);const d={business:BIZ,item:f.it.value.trim(),qty:+f.qty.value||1,unit:f.unit.value.trim(),kind:f.kind.value,urgency:f.urg.value,jobId:j?j.id:"",jobCode:j?j.code:"",supplier:f.sup.value.trim(),estCost:0,who:S.me,email:myEmail(),at:new Date().toISOString(),status:"needed"};
+    if(!d.item)return;try{await db.collection("tobuy").add(d);e.target.reset();toast("Added")}catch(err){fail(err)}};
+  el.querySelectorAll("[data-bst]").forEach(s=>s.onchange=()=>{s.blur();setField("tobuy",s.dataset.bst,{status:s.value}).then(()=>toast(s.value==="got"?"Ticked off":"Updated"))});
+  bindDel(el,"tobuy");
+}
+
 /* ---------- MANAGER ---------- */
 function renderMgr(){
   const el=$("v-mgr");if(el.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
@@ -482,7 +645,7 @@ function renderMgr(){
   const byWho={},byJob={};let tot=0;sh.forEach(s=>{const h=+s.hours||0;tot+=h;byWho[s.who]=(byWho[s.who]||0)+h;byJob[s.jobId]=(byJob[s.jobId]||0)+h});
   const cTot=co.reduce((t,c)=>t+(+c.cost||0),0),lc=+S.rates.labourCost||0;
   const offSite=sh.filter(s=>s.onLoc&&s.onLoc.onSite===false).length,noGps=sh.filter(s=>!s.onLoc||s.onLoc.none).length;
-  el.innerHTML=`
+  el.innerHTML=dueBanner(S.tix,true)+`
   <div class="panel"><h3>On the clock now</h3>${onNow.length?onNow.map(s=>`<div class="mem"><div><b>${esc(s.who)}</b> · ${esc(jobName(s.jobId))}<br><span class="muted small">since ${fmtT(s.on)} ${fmtD(s.date)} (${elapsed(s.on)})</span></div>${locPill(s.onLoc)}</div>`).join(""):`<div class="muted">Nobody.</div>`}</div>
 
   <div class="toolbar"><button class="btn small" id="mPrev">‹</button><h2 class="v" style="margin:0;flex:1;text-align:center">Week of ${w.toLocaleDateString("en-AU",{day:"numeric",month:"short"})}</h2><button class="btn small" id="mNext">›</button></div>
@@ -491,7 +654,7 @@ function renderMgr(){
   <div class="panel"><h3>By person</h3><div class="tbl"><table><tbody>${Object.entries(byWho).sort((x,y)=>y[1]-x[1]).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="num">${hf(v)} h</td><td class="num">${money(v*lc)}</td></tr>`).join("")||`<tr><td class="muted">No hours.</td></tr>`}</tbody></table></div></div>
 
   <div class="panel"><h3>Jobs: expected vs actual (all time)</h3><div class="tbl"><table><thead><tr><th>Job</th><th class="num">Week</th><th class="num">Total / exp</th><th class="num">Consum.</th><th class="num">Quote</th><th class="num">Profit</th></tr></thead><tbody>${openJobs().map(j=>{const h=jobHrs(j.id),c=jobCons(j.id),m=S.money[j.id]||{};const rev=m.pricing==="hourly"?h*(+m.chargeRate||+S.rates.chargeRate||0)+c*(1+(+m.markup||0)/100):(+m.quote||0);const p=rev-h*lc-c;
-    return`<tr><td><span class="code">${esc(j.code)}</span> ${esc(j.title)}</td><td class="num">${hf(byJob[j.id]||0)}</td><td class="num" style="${j.expectedHrs&&h>j.expectedHrs?"color:var(--bad)":""}">${hf(h)}${j.expectedHrs?" / "+hf(j.expectedHrs):""}</td><td class="num">${money(c)}</td><td class="num">${rev?money(rev):"–"}</td><td class="num" style="color:var(--${p>=0?"good":"bad"})">${rev?money(p):"–"}</td></tr>`}).join("")||`<tr><td class="muted">No open jobs.</td></tr>`}</tbody></table></div></div>
+    return`<tr><td><span class="code">${esc(j.code)}</span> ${esc(j.title)}</td><td class="num">${hf(byJob[j.id]||0)}</td><td class="num" style="${expHrs(j.id)&&h>expHrs(j.id)?"color:var(--bad)":""}">${hf(h)}${expHrs(j.id)?" / "+hf(expHrs(j.id)):""}</td><td class="num">${money(c)}</td><td class="num">${rev?money(rev):"–"}</td><td class="num" style="color:var(--${p>=0?"good":"bad"})">${rev?money(p):"–"}</td></tr>`}).join("")||`<tr><td class="muted">No open jobs.</td></tr>`}</tbody></table></div></div>
 
   <div class="panel"><div class="row" style="justify-content:space-between;align-items:center"><h3>Timesheets this week</h3><button class="btn small" id="csv">Download CSV</button></div>
     <div class="tbl"><table><thead><tr><th>Date</th><th>Who</th><th>Job</th><th>Time</th><th class="num">Hrs</th><th></th></tr></thead><tbody>${sh.map(s=>`<tr><td>${fmtD(s.date)}</td><td>${esc(s.who)}</td><td>${esc(s.jobCode)}</td><td>${fmtT(s.on)}–${s.off?fmtT(s.off):"now"}${s.breakMin?`<br><span class="muted small">${s.breakMin} min break</span>`:""}<br>${locPill(s.onLoc)}</td><td class="num">${s.hours!=null?hf(s.hours):"…"}</td><td><button class="btn small" data-fix="${esc(s.id)}">Fix</button></td></tr>`).join("")||`<tr><td colspan="6" class="muted">No hours this week.</td></tr>`}</tbody></table></div>
@@ -517,7 +680,8 @@ function renderMgr(){
   $("rF").onsubmit=async e=>{e.preventDefault();try{await db.doc("money/_rates").set({labourCost:r2(e.target.elements.labourCost.value),chargeRate:r2(e.target.elements.chargeRate.value)});toast("Rates saved")}catch(err){fail(err)}};
   const ref=db.doc("access/members");
   el.querySelectorAll("[data-acc]").forEach(b=>b.onclick=async()=>{const r=S.reqs.find(x=>x.id===b.dataset.id);if(!r)return;
-    try{if(b.dataset.acc!=="no"){const nm=(el.querySelector(`[data-rn="${CSS.escape(r.id)}"]`)||{}).value||r.name||r.email;await ref.set({members:{[r.email.toLowerCase()]:{name:nm.trim(),role:b.dataset.acc}}},{merge:true})}
+    try{if(b.dataset.acc!=="no"){const nm=(el.querySelector(`[data-rn="${CSS.escape(r.id)}"]`)||{}).value||r.name||r.email;await ref.set({members:{[r.email.toLowerCase()]:{name:nm.trim(),role:b.dataset.acc}}},{merge:true});
+      for(const x of S.tix.filter(x=>x.who===nm.trim()&&!x.email))await db.doc("tickets/"+x.id).update({email:r.email.toLowerCase()}).catch(()=>{})}
       await db.doc("requests/"+r.id).delete();toast(b.dataset.acc==="no"?"Ignored":"Let in")}catch(err){fail(err)}});
   el.querySelectorAll("[data-role]").forEach(s=>s.onchange=async()=>{const m={...S.access};m[s.dataset.role]={...m[s.dataset.role],role:s.value};try{await ref.set({members:m})}catch(err){fail(err)}});
   el.querySelectorAll("[data-rmm]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Tap again";return}const m={...S.access};delete m[b.dataset.rmm];try{await ref.set({members:m})}catch(err){fail(err)}});
@@ -569,7 +733,7 @@ function applyAccess(){
   $("gate").hidden=true;$("app").hidden=false;$("meName").textContent=S.me+(isMgr()?" · manager":"");
   startData();let v=S.view;try{v=localStorage.getItem("tws-view")||v}catch(e){}show(v);
 }
-auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];
+auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.ideas=[];S.fix=[];S.buy=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
   if(!u){gate("Total Welding Solutions crew only. Sign in with your Google account.",false);return}
   gate("Checking you're on the crew…",false);watchAccess(u);
 });
@@ -586,6 +750,10 @@ function startData(){
   on(db.collection("shifts").where("date",">=",since),s=>{S.shifts=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("consumables").where("date",">=",since),s=>{S.cons=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   watchCal();
+  on(db.collection("repairs"),s=>{S.fix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(db.collection("tobuy"),s=>{S.buy=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(db.collection("ideas"),s=>{S.ideas=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(isMgr()?db.collection("tickets"):db.collection("tickets").where("email","==",myEmail()),s=>{S.tix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   if(isMgr()){
     on(db.collection("requests"),s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data()}));render()});
     on(db.collection("money"),s=>{const o={};s.docs.forEach(d=>o[d.id]=d.data());S.rates=o._rates||{labourCost:0,chargeRate:0};delete o._rates;S.money=o;render()});
@@ -598,7 +766,7 @@ async function seed(){
   if(S.seeded||!isOwner()||S.jobs.length)return;S.seeded=true;
   const now=new Date().toISOString();
   for(const [code,title] of [["TWS-0001","Curtis Ferry"],["TWS-0002","East Coast"]])
-    await db.doc("jobs/"+code.toLowerCase()).set({code,business:BIZ,title,site:title,client:"",address:"",contactName:"",contactPhone:"",status:"Active",expectedHrs:0,start:"",end:"",crew:[],plan:[],notes:"",lat:null,lng:null,radius:300,createdAt:"2026-11-02T09:00:00.000Z",updatedAt:now}).catch(()=>{});
+    await db.doc("jobs/"+code.toLowerCase()).set({code,business:BIZ,title,site:title,client:"",address:"",contactName:"",contactPhone:"",status:"Active",start:"",end:"",crew:[],plan:[],notes:"",lat:null,lng:null,radius:300,createdAt:"2026-11-02T09:00:00.000Z",updatedAt:now}).catch(()=>{});
 }
 try{const v=localStorage.getItem("tws-view");if(v)S.view=v}catch(e){}
 show(S.view);

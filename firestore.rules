@@ -38,9 +38,16 @@ service cloud.firestore {
                                      && request.resource.data.email == email());
       allow delete: if manager();
     }
+    // Tickets & licences: crew see and change their own, managers see all (company ones too)
+    match /tickets/{id} {
+      allow read, delete: if manager() || (member() && resource.data.email == email());
+      allow update: if manager() || (member() && resource.data.email == email()
+                                     && request.resource.data.email == email());
+      allow create: if manager() || (member() && request.resource.data.email == email());
+    }
     // Everything else (jobs, consumables, calendar, totals): crew
     match /{col}/{rest=**} {
-      allow read, write: if member() && !(col in ['access', 'requests', 'money', 'shifts']);
+      allow read, write: if member() && !(col in ['access', 'requests', 'money', 'shifts', 'tickets']);
     }
   }
 }
