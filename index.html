@@ -362,7 +362,7 @@ function renderClock(){
     h+=`<div class="panel clock"><span class="pill" style="align-self:center">NOT CLOCKED ON</span>
       ${js.length?`<label class="f" style="text-align:left">Job<select id="cJob"><option value="">Choose job…</option>${js.map(j=>`<option value="${esc(j.id)}" ${j.id===pick?"selected":""}>${esc(j.code+" · "+j.title)}</option>`).join("")}</select></label>
       <button class="btn small" id="findSite" style="align-self:center">📍 Find my site</button>
-      <button class="btn go big" id="clockOn">Clock on</button>`:`<p class="muted">No jobs yet. ${isMgr()?"Add one under Jobs.":"Ask Luke to add the job."}</p>`}
+      <button class="btn go big" id="clockOn" ${pick&&job(pick)?"":"disabled"}>${pick&&job(pick)?"Clock on":"Choose a job to clock on"}</button>`:`<p class="muted">No jobs yet. ${isMgr()?"Add one under Jobs.":"Ask Luke to add the job."}</p>`}
       <div class="muted small">Your location is saved when you clock on and off, to check you're on site.</div></div>`;
   }
   const cj=o?o.jobId:(S.pick??todaysPick());
