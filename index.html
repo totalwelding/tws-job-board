@@ -95,6 +95,23 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .card .m{display:flex;justify-content:space-between;gap:8px;color:var(--muted);font-size:12px}
 .grp{font:600 13px var(--display);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:6px 2px}
 /* calendar */
+.seg{display:flex;gap:4px;background:var(--sunk);padding:4px;border-radius:10px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:none;padding:8px 4px;border-radius:7px;font:600 13px var(--body);color:var(--muted);cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--fg);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.seg .tod{flex:0 0 auto;padding-inline:12px;color:var(--accent)}
+.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.month .dow{font:600 11px var(--body);color:var(--muted);text-align:center;text-transform:uppercase;padding:2px 0}
+.mday{background:var(--panel);border:1px solid var(--line);border-radius:8px;min-height:74px;padding:4px;display:flex;flex-direction:column;gap:2px;cursor:pointer;text-align:left;font:inherit;color:inherit;overflow:hidden}
+.mday.out{opacity:.45}.mday.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.mday .dn{font:600 12px var(--mono)}
+.mday .mc{font-size:10.5px;line-height:1.2;background:var(--sunk);border-radius:4px;padding:1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mday .mc b{color:var(--accent);font-weight:600}
+.mday .ma{font-size:10.5px;color:var(--good);font-weight:600}
+.mday .mt{display:none}
+@media (min-width:700px){.mday{min-height:96px}.mday .mc{font-size:12px}.mday .mt{display:inline}}
+.dayv .cell{min-height:70px}
+@media (max-width:700px){.dayv .ppl{grid-template-columns:1fr}}
+.dayv .chip{font-size:14px;padding:6px 8px}
 .cal{display:grid;gap:6px}
 .day{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .day.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
@@ -177,10 +194,11 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
   <!-- CALENDAR -->
   <section id="v-cal" hidden>
     <div class="toolbar">
-      <button class="btn small" id="cPrev" aria-label="Previous week">‹</button>
+      <button class="btn small" id="cPrev" aria-label="Previous">‹</button>
       <h2 class="v" id="cLabel" style="margin:0;flex:1;text-align:center"></h2>
-      <button class="btn small" id="cNext" aria-label="Next week">›</button>
+      <button class="btn small" id="cNext" aria-label="Next">›</button>
     </div>
+    <div class="seg" role="tablist" aria-label="Calendar view"><button data-cm="day">Day</button><button data-cm="week">Week</button><button data-cm="month">Month</button><button data-cm="today" class="tod">Today</button></div>
     <p class="muted small mgr" style="margin:0 0 8px">Tap a box to put someone on a job for that day. Green ticks are hours actually clocked.</p>
     <div class="cal" id="calGrid"></div>
   </section>
@@ -249,7 +267,7 @@ firebase.initializeApp(window.FIREBASE_CONFIG);
 const auth=firebase.auth(),db=firebase.firestore();
 try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
 const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],fix:[],buy:[],photos:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
-  view:"clock",calWeek:monday(new Date()),mgrWeek:monday(new Date()),open:null,pick:null,loaded:{},seeded:false};
+  view:"clock",calDate:new Date(),calMode:"week",mgrWeek:monday(new Date()),open:null,pick:null,loaded:{},seeded:false};
 let subs=[];
 const myEmail=()=>(S.user&&S.user.email||"").toLowerCase();
 const isOwner=()=>OWNERS.includes(myEmail());
@@ -475,18 +493,33 @@ function renderSheet(){
 }
 
 /* ---------- CALENDAR ---------- */
-$("cPrev").onclick=()=>{S.calWeek=addDays(S.calWeek,-7);watchCal();renderCal()};
-$("cNext").onclick=()=>{S.calWeek=addDays(S.calWeek,7);watchCal();renderCal()};
-function renderCal(){
-  const w=S.calWeek,ps=people(),today=ymd(new Date());
-  $("cLabel").textContent=w.toLocaleDateString("en-AU",{day:"numeric",month:"short"})+" – "+addDays(w,6).toLocaleDateString("en-AU",{day:"numeric",month:"short"});
-  let h="";
-  for(let i=0;i<7;i++){const d=ymd(addDays(w,i));
-    const running=S.jobs.filter(j=>j.status!=="Done"&&j.start&&j.start<=d&&(!j.end||j.end>=d));
-    h+=`<div class="day ${d===today?"today":""}"><h4><span>${fmtD(d)}</span><span class="muted small" style="text-transform:none;font-family:var(--body);font-weight:400">${running.map(j=>esc(j.code)).join(" · ")}</span></h4><div class="ppl" style="--n:${ps.length}">`+
+try{const m=localStorage.getItem("tws-calmode");if(["day","week","month"].includes(m))S.calMode=m}catch(e){}
+function calStep(n){const d=new Date(S.calDate);if(S.calMode==="day")d.setDate(d.getDate()+n);else if(S.calMode==="week")d.setDate(d.getDate()+7*n);else{d.setDate(1);d.setMonth(d.getMonth()+n)}S.calDate=d;watchCal();renderCal()}
+$("cPrev").onclick=()=>calStep(-1);$("cNext").onclick=()=>calStep(1);
+document.querySelectorAll("[data-cm]").forEach(b=>b.onclick=()=>{const m=b.dataset.cm;if(m==="today"){S.calDate=new Date()}else{S.calMode=m;try{localStorage.setItem("tws-calmode",m)}catch(e){}}watchCal();renderCal()});
+function calStart(){const d=S.calDate;if(S.calMode==="day")return new Date(d.getFullYear(),d.getMonth(),d.getDate());if(S.calMode==="week")return monday(d);return monday(new Date(d.getFullYear(),d.getMonth(),1))}
+function dayBlock(d,ps,today,big){
+  const running=S.jobs.filter(j=>j.status!=="Done"&&j.start&&j.start<=d&&(!j.end||j.end>=d));
+  return`<div class="day ${d===today?"today":""} ${big?"dayv":""}"><h4><span>${fmtD(d)}</span><span class="muted small" style="text-transform:none;font-family:var(--body);font-weight:400">${running.map(j=>esc(j.code)).join(" · ")}</span></h4><div class="ppl" style="--n:${ps.length}">`+
     ps.map(p=>{const al=S.cal.filter(c=>c.date===d&&c.who===p);const act=S.shifts.filter(s=>s.date===d&&s.who===p);const ah=act.reduce((a,s)=>a+(+s.hours||0),0);
-      return`<div class="cell ${p===S.me?"me":""} ${isMgr()?"can":""}" data-d="${d}" data-p="${esc(p)}"><span class="nm">${esc(p)}</span>${al.map(c=>`<span class="chip"><b>${esc(c.jobCode)}</b> ${esc((job(c.jobId)||{}).title||c.site||"")}${c.hrs?` · ${hf(c.hrs)}h`:""}</span>`).join("")}${act.length?`<span class="act">✓ ${hf(ah)}h${act.some(s=>!s.off)?" (on now)":""}</span>`:""}</div>`}).join("")+`</div></div>`}
+      return`<div class="cell ${p===S.me?"me":""} ${isMgr()?"can":""}" data-d="${d}" data-p="${esc(p)}"><span class="nm">${esc(p)}</span>${al.map(c=>`<span class="chip"><b>${esc(c.jobCode)}</b> ${esc((job(c.jobId)||{}).title||c.site||"")}${c.hrs?` · ${hf(c.hrs)}h`:""}${big&&c.note?`<br><span class="muted small">${esc(c.note)}</span>`:""}</span>`).join("")}${act.length?`<span class="act">✓ ${hf(ah)}h${act.some(s=>!s.off)?" (on now)":""}${big?" · "+act.map(s=>`${fmtT(s.on)}–${s.off?fmtT(s.off):"now"} ${esc(s.jobCode)}`).join(", "):""}</span>`:""}</div>`}).join("")+`</div>`+
+    (big&&running.length?`<div class="small muted" style="margin-top:8px">${running.map(j=>`<b class="code">${esc(j.code)}</b> ${esc(j.title)}${j.end?" (to "+fmtD(j.end)+")":""}`).join("<br>")}</div>`:"")+`</div>`}
+function renderCal(){
+  const ps=people(),today=ymd(new Date()),st=calStart(),m=S.calMode;
+  document.querySelectorAll("[data-cm]").forEach(b=>b.setAttribute("aria-pressed",b.dataset.cm===m));
+  let h="";
+  if(m==="day"){const d=ymd(st);$("cLabel").textContent=st.toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"short"});h=dayBlock(d,ps,today,true)}
+  else if(m==="week"){$("cLabel").textContent=st.toLocaleDateString("en-AU",{day:"numeric",month:"short"})+" – "+addDays(st,6).toLocaleDateString("en-AU",{day:"numeric",month:"short"});
+    for(let i=0;i<7;i++)h+=dayBlock(ymd(addDays(st,i)),ps,today,false)}
+  else{const mo=S.calDate.getMonth();$("cLabel").textContent=S.calDate.toLocaleDateString("en-AU",{month:"long",year:"numeric"});
+    const last=new Date(S.calDate.getFullYear(),mo+1,0),weeks=Math.ceil((((last-st)/864e5)+1)/7);
+    h=`<div class="month">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(x=>`<div class="dow">${x}</div>`).join("")}`;
+    for(let i=0;i<weeks*7;i++){const dt=addDays(st,i),d=ymd(dt);const al=S.cal.filter(c=>c.date===d).sort((a,b)=>String(a.who).localeCompare(b.who));
+      const ah=S.shifts.filter(s=>s.date===d).reduce((a,s)=>a+(+s.hours||0),0);
+      h+=`<button class="mday ${dt.getMonth()!==mo?"out":""} ${d===today?"today":""}" data-day="${d}" aria-label="${fmtD(d)}"><span class="dn">${dt.getDate()}</span>${al.slice(0,4).map(c=>`<span class="mc">${esc(String(c.who)[0])} <b>${parseInt(String(c.jobCode).replace(/\D/g,""),10)||""}</b><span class="mt"> ${esc((job(c.jobId)||{}).title||c.site||"")}</span></span>`).join("")}${al.length>4?`<span class="mc">+${al.length-4}</span>`:""}${ah?`<span class="ma">✓ ${hf(ah)}h</span>`:""}</button>`}
+    h+=`</div><p class="muted small" style="margin:8px 0 0">Letter = who (L, H, J), number = job (1 = TWS-0001). Tap a day to open it.</p>`}
   $("calGrid").innerHTML=h;
+  $("calGrid").querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{const [y,mm,dd]=b.dataset.day.split("-");S.calDate=new Date(+y,mm-1,+dd);S.calMode="day";watchCal();renderCal()});
   if(isMgr())$("calGrid").querySelectorAll(".cell.can").forEach(c=>c.onclick=()=>calSheet(c.dataset.d,c.dataset.p));
 }
 function calSheet(d,p){
@@ -805,7 +838,7 @@ function startData(){
     on(db.collection("money"),s=>{const o={};s.docs.forEach(d=>o[d.id]=d.data());S.rates=o._rates||{labourCost:0,chargeRate:0};delete o._rates;S.money=o;render()});
   }
 }
-function watchCal(){if(!started)return;if(calSub)calSub();const a=ymd(addDays(S.calWeek,-7));
+function watchCal(){if(!started)return;if(calSub)calSub();const a=ymd(addDays(calStart(),-7));
   calSub=db.collection("calendar").where("date",">=",a).onSnapshot(s=>{S.cal=s.docs.map(d=>({id:d.id,...d.data()}));render()},e=>console.warn(e))}
 // First run: bring across the two jobs from the old Claude Job Board
 async function seed(){
