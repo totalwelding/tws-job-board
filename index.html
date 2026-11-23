@@ -832,10 +832,10 @@ let dataSubs=[],calSub=null,started=false;
 function stopData(){dataSubs.forEach(f=>{try{f()}catch(e){}});dataSubs=[];if(calSub){calSub();calSub=null}started=false}
 function startData(){
   if(started)return;started=true;
-  const on=(q,f)=>dataSubs.push(q.onSnapshot(f,e=>{console.warn(e);note("Lost connection to the board. Reopen the app to reconnect.")}));
+  const on=(q,f,o)=>dataSubs.push(q.onSnapshot(o||{},f,e=>{console.warn(e);note("Lost connection to the board. Reopen the app to reconnect.")}));
   const since=ymd(addDays(new Date(),-120));
   const tm=setTimeout(()=>{if(!S.loaded.jobs)note("Can't reach the board yet. Check your signal.")},10000);
-  on(db.collection("jobs"),s=>{S.jobs=s.docs.map(d=>({id:d.id,...d.data()}));if(!s.metadata.fromCache){S.loaded.jobs=true;clearTimeout(tm);note("");seed()}render()});
+  on(db.collection("jobs"),s=>{S.jobs=s.docs.map(d=>({id:d.id,...d.data()}));if(s.docs.length||!s.metadata.fromCache){if(!S.loaded.jobs){S.loaded.jobs=true;clearTimeout(tm);note("")}}if(!s.metadata.fromCache)seed();render()},{includeMetadataChanges:true});
   on(db.collection("shifts").where("date",">=",since),s=>{S.shifts=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("consumables").where("date",">=",since),s=>{S.cons=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   watchCal();
