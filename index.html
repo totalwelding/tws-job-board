@@ -5,7 +5,7 @@
 <title>TWS Job Board</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#16202b">
-<link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="favicon.png"><link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -154,7 +154,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .viewer img{max-width:100%;max-height:78vh;border-radius:6px}
 /* gate */
 #gate{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:30px;text-align:center;background:#16202b;color:#fff}
-#gate img{width:96px;height:96px;border-radius:20px}
+
 #gate p{max-width:360px;color:#c9d4de}
 .mem{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--line)}
 .mem > div{flex:1 1 160px}
@@ -162,8 +162,8 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 </head><body>
 
 <div id="gate">
-  <img src="icon-192.png" alt="">
-  <h1 class="brand" style="font-size:28px">Total Welding Solutions<small>JOB BOARD</small></h1>
+  <h1 style="margin:0"><img src="logo-white.png" alt="TWS – Total Welding Solutions. Harder Better Faster Stronger" style="width:min(320px,80vw);height:auto;border-radius:0"></h1>
+  <div class="brand" style="font-size:18px;color:#9fb0c0;letter-spacing:.2em">JOB BOARD</div>
   <p id="gateMsg">Loading…</p>
   <button class="btn primary big" id="signIn" style="max-width:320px" hidden>Sign in with Google</button>
   <a href="#" id="gateOut" class="small" style="color:#9fb0c0" hidden>Sign out</a>
@@ -171,7 +171,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 
 <div id="app" hidden>
 <header><div class="wrap hrow">
-  <h1 class="brand">TWS<small>JOB BOARD</small></h1>
+  <h1 class="brand" style="display:flex;align-items:center;gap:10px"><img src="logo-white.png" alt="TWS" style="height:30px;width:auto"><small style="margin:0">JOB<br>BOARD</small></h1>
   <span class="sp"></span>
   <div class="who"><span id="meName"></span><br><a href="#" id="signOut">Sign out</a></div>
 </div></header>
