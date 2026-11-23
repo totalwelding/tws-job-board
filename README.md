@@ -30,6 +30,7 @@ All dates are `YYYY-MM-DD` (Brisbane local). Times are ISO UTC. Money is $ ex GS
 | `calendar/{date_who_job}` | date, who, jobId, jobCode, site, hrs (planned), note |
 | `totals/{date}` | **dashboard reads this**: hours, hoursByJob{code:h}, hoursByWho{name:h}, consumables, consumablesByJob{code:$}, jobs{code:site}, shifts |
 | `tickets/{id}` | who (person, "TWS (company)" or a plant item), email (blank = company/plant, managers only), type, expiry, remind (days), num, note, link |
+| `tixphotos/{id}` | photos of tickets (same privacy as tickets): target "ticket", targetId, email, thumb, driveId. Full image in Drive or `tixphotoData/{id}` |
 | `settings/plant` | names[] (plant & vehicles list) |
 | `ideas/{id}` | title, cat, detail, jobId, jobCode, who, at, status (new/trying/adopted/no), votes[], reply |
 | `repairs/{id}` | item, problem, down (can't use), jobId, jobCode, who, at, status (reported/fixing/parts/fixed/gone), fixNote, cost |

@@ -45,9 +45,20 @@ service cloud.firestore {
                                      && request.resource.data.email == email());
       allow create: if manager() || (member() && request.resource.data.email == email());
     }
+    // Photos of tickets & licences: same privacy as the tickets
+    match /tixphotos/{id} {
+      allow read, delete: if manager() || (member() && resource.data.email == email());
+      allow create: if manager() || (member() && request.resource.data.email == email());
+      allow update: if manager();
+    }
+    match /tixphotoData/{id} {
+      allow read, delete: if manager() || (member() && resource.data.email == email());
+      allow create: if manager() || (member() && request.resource.data.email == email());
+      allow update: if manager();
+    }
     // Everything else (jobs, consumables, calendar, totals): crew
     match /{col}/{rest=**} {
-      allow read, write: if member() && !(col in ['access', 'requests', 'money', 'shifts', 'tickets']);
+      allow read, write: if member() && !(col in ['access', 'requests', 'money', 'shifts', 'tickets', 'tixphotos', 'tixphotoData']);
     }
   }
 }

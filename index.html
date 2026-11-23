@@ -266,7 +266,7 @@ function mapsUrl(j){if(hasLoc(j))return`https://www.google.com/maps/search/?api=
 firebase.initializeApp(window.FIREBASE_CONFIG);
 const auth=firebase.auth(),db=firebase.firestore();
 try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
-const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],plant:null,fix:[],buy:[],photos:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
+const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],tixPhotos:[],ideas:[],plant:null,fix:[],buy:[],photos:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
   view:"clock",calDate:new Date(),calMode:"week",mgrWeek:monday(new Date()),open:null,pick:null,loaded:{},seeded:false};
 let subs=[];
 const myEmail=()=>(S.user&&S.user.email||"").toLowerCase();
@@ -568,12 +568,13 @@ function renderTix(){
     <label class="f full">Link to a copy (optional)<input name="link" type="url" placeholder="Paste a Google Drive link to the card or certificate"></label>
     <div class="full"><button class="btn primary" type="submit">Save ticket</button></div>
   </form><datalist id="tixList">${TIX.map(x=>`<option value="${esc(x)}">`).join("")}</datalist></div>`+
-  (order.length?order.map(w=>`<div class="panel"><h3>${esc(w)}</h3>${by[w].sort((a,b)=>String(a.expiry||"9999").localeCompare(b.expiry||"9999")).map(x=>`<div class="tk"><div><b>${esc(x.type)}</b>${x.num?` <span class="muted small">${esc(x.num)}</span>`:""}<br><span class="ex ${x.expiry&&daysLeft(x.expiry)<0?"":"muted"}">${x.expiry?fmtD(x.expiry)+" · "+dueTxt(daysLeft(x.expiry)):"No expiry"}</span>${x.note?`<br><span class="muted small">${esc(x.note)}</span>`:""}${/^https:\/\//.test(x.link||"")?`<br><a class="small" href="${esc(x.link)}" target="_blank" rel="noopener">📄 View copy</a>`:""}</div>${pill(x)}<button class="btn small" data-ren="${esc(x.id)}">Renewed</button><button class="btn small link danger" data-delt="${esc(x.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>`).join("")
+  (order.length?order.map(w=>`<div class="panel"><h3>${esc(w)}</h3>${by[w].sort((a,b)=>String(a.expiry||"9999").localeCompare(b.expiry||"9999")).map(x=>`<div class="tk"><div><b>${esc(x.type)}</b>${x.num?` <span class="muted small">${esc(x.num)}</span>`:""}<br><span class="ex ${x.expiry&&daysLeft(x.expiry)<0?"":"muted"}">${x.expiry?fmtD(x.expiry)+" · "+dueTxt(daysLeft(x.expiry)):"No expiry"}</span>${x.note?`<br><span class="muted small">${esc(x.note)}</span>`:""}${/^https:\/\//.test(x.link||"")?`<br><a class="small" href="${esc(x.link)}" target="_blank" rel="noopener">📄 View copy</a>`:""}<div class="ph" style="margin-top:6px;grid-template-columns:repeat(auto-fill,minmax(64px,72px))">${photosOf("ticket",x.id).map(p=>`<button type="button" class="th" data-ph="${esc(p.id)}" aria-label="Photo of ${esc(x.type)}"><img src="${p.thumb}" alt="" loading="lazy"></button>`).join("")}<label class="add" style="font-size:10px"><span>📷</span>Photo<input type="file" accept="image/*" multiple data-up="ticket|${esc(x.id)}|card|"></label></div></div>${pill(x)}<button class="btn small" data-ren="${esc(x.id)}">Renewed</button><button class="btn small link danger" data-delt="${esc(x.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>`).join("")
    :`<div class="panel muted">No tickets yet. Add licences and tickets above and the app will warn ${mg?"you and them":"you"} before they expire.</div>`);
   $("tF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements;const w=mg?f.who.value:S.me;
     const em=w===S.me?myEmail():(w===COMPANY||plantList().includes(w))?"":(Object.keys(S.access).find(k=>S.access[k].name===w)||"");
     const d={business:BIZ,who:w,email:em,type:f.type.value.trim(),expiry:f.expiry.value,remind:+f.remind.value||30,num:f.num.value.trim(),note:f.note.value.trim(),link:f.link.value.trim(),by:S.me,updatedAt:new Date().toISOString()};
     if(!d.type)return;try{await db.collection("tickets").add(d);e.target.reset();toast("Ticket saved")}catch(err){fail(err)}};
+  bindPhotos(el);
   el.querySelectorAll("[data-delt]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc("tickets/"+b.dataset.delt).delete()}catch(err){fail(err)}});
   el.querySelectorAll("[data-ren]").forEach(b=>b.onclick=()=>{const x=S.tix.find(t=>t.id===b.dataset.ren);if(!x)return;const row=b.closest(".tk");
     row.innerHTML=`<div><b>${esc(x.type)}</b> · new expiry</div><input type="date" class="in" style="width:auto" id="rnD"><button class="btn small primary" id="rnS">Save</button>`;
@@ -614,20 +615,22 @@ function renderIdeas(){
    or in Firestore photoData/* if Drive isn't set up or can't be reached ---------- */
 async function drive(body){const url=window.PHOTO_SCRIPT_URL;if(!url)throw new Error("no drive");
   const token=await S.user.getIdToken();const r=await fetch(url,{method:"POST",body:JSON.stringify({...body,token})});const j=await r.json();if(!j.ok)throw new Error(j.error||"drive failed");return j}
-function photoPath(target,targetId,stage){if(target==="job"){const j=job(targetId)||{};return[`${j.code||""} ${j.title||""}`.trim(),stage[0].toUpperCase()+stage.slice(1)]}
+function photoPath(target,targetId,stage){if(target==="ticket"){const x=S.tix.find(t=>t.id===targetId)||{};return["Tickets",x.who||"Other"]}if(target==="job"){const j=job(targetId)||{};return[`${j.code||""} ${j.title||""}`.trim(),stage[0].toUpperCase()+stage.slice(1)]}
   const x=S.fix.find(f=>f.id===targetId)||{};return["Repairs",`${String(x.at||new Date().toISOString()).slice(0,10)} ${x.item||targetId}`]}
 function loadImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),i=new Image();i.onload=()=>{res(i);setTimeout(()=>URL.revokeObjectURL(u),1000)};i.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("bad image"))};i.src=u})}
 function shrink(img,max,q){const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);c.getContext("2d").drawImage(img,0,0,c.width,c.height);return c.toDataURL("image/jpeg",q)}
-async function addPhotos(files,target,targetId,stage,code){
+const PCOL=t=>t==="ticket"?["tixphotos","tixphotoData"]:["photos","photoData"];
+function tixEmail(id){const x=S.tix.find(t=>t.id===id);return x?(x.email||""):myEmail()}
+async function addPhotos(files,target,targetId,stage,code){const [pc,dc]=PCOL(target),pem=target==="ticket"?tixEmail(targetId):myEmail();
   const list=[...files];if(!list.length)return;let n=0;toast(`Uploading ${list.length} photo${list.length>1?"s":""}…`,60000);
   for(const f of list){try{const img=await loadImg(f);let full=shrink(img,1600,.72);if(full.length>850000)full=shrink(img,1200,.6);if(full.length>950000)full=shrink(img,900,.55);
       const thumb=shrink(img,240,.6),id="p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),now=new Date();
       let driveId="";try{if(window.PHOTO_SCRIPT_URL)driveId=(await drive({action:"put",path:photoPath(target,targetId,stage),name:`${ymd(now)} ${pad(now.getHours())}${pad(now.getMinutes())} ${S.me} ${id}.jpg`,note:`${code||""} ${stage} by ${S.me}`,data:full})).id}catch(e){console.warn("drive",e)}
-      const bt=db.batch();if(!driveId)bt.set(db.doc("photoData/"+id),{data:full});
-      bt.set(db.doc("photos/"+id),{business:BIZ,target,targetId,jobCode:code||"",stage,thumb,driveId,w:img.naturalWidth,h:img.naturalHeight,who:S.me,email:myEmail(),date:ymd(now),at:now.toISOString(),caption:""});
+      const bt=db.batch();if(!driveId)bt.set(db.doc(dc+"/"+id),{data:full,email:pem});
+      bt.set(db.doc(pc+"/"+id),{business:BIZ,target,targetId,jobCode:code||"",stage,thumb,driveId,w:img.naturalWidth,h:img.naturalHeight,who:S.me,email:pem,by:myEmail(),date:ymd(now),at:now.toISOString(),caption:""});
       await bt.commit();n++}catch(e){console.warn(e)}}
   toast(n===list.length?`${n} photo${n>1?"s":""} saved`:`${n} of ${list.length} saved. Try the others again.`,3000)}
-function photosOf(target,id,stage){return S.photos.filter(p=>p.target===target&&p.targetId===id&&(!stage||p.stage===stage)).sort((a,b)=>String(a.at).localeCompare(b.at))}
+function photosOf(target,id,stage){return (target==="ticket"?S.tixPhotos:S.photos).filter(p=>p.target===target&&p.targetId===id&&(!stage||p.stage===stage)).sort((a,b)=>String(a.at).localeCompare(b.at))}
 function photoGrid(target,id,stage,code,label){const ps=photosOf(target,id,stage);
   return`<div class="ph">${ps.map(p=>`<button type="button" class="th" data-ph="${esc(p.id)}" aria-label="Photo by ${esc(p.who)}"><img src="${p.thumb}" alt="" loading="lazy"></button>`).join("")}
   <label class="add"><span>📷</span>${esc(label||"Add")}<input type="file" accept="image/*" multiple data-up="${esc(target)}|${esc(id)}|${esc(stage)}|${esc(code||"")}"></label></div>`}
@@ -635,12 +638,12 @@ function bindPhotos(root){
   root.querySelectorAll("input[data-up]").forEach(i=>i.onchange=async()=>{const [tg,id,st,code]=i.dataset.up.split("|");const fs=[...i.files];i.value="";i.blur();await addPhotos(fs,tg,id,st,code)});
   root.querySelectorAll("[data-ph]").forEach(b=>b.onclick=()=>viewPhoto(b.dataset.ph));
 }
-async function viewPhoto(id){const p=S.photos.find(x=>x.id===id);if(!p)return;
+async function viewPhoto(id){const p=S.photos.find(x=>x.id===id)||S.tixPhotos.find(x=>x.id===id);if(!p)return;const [pc,dc]=PCOL(p.target);
   const v=document.createElement("div");v.className="viewer";v.innerHTML=`<img src="${p.thumb}" alt=""><div class="small">${esc(p.stage)} · ${esc(p.who)} · ${fmtD(p.date)} ${fmtT(p.at)}</div>
-  <div class="row" style="justify-content:center"><button class="btn small" id="pvX">Close</button>${isMgr()||p.email===myEmail()?`<button class="btn small danger" id="pvD">Delete</button>`:""}</div>`;
+  <div class="row" style="justify-content:center"><button class="btn small" id="pvX">Close</button>${isMgr()||p.email===myEmail()||p.by===myEmail()?`<button class="btn small danger" id="pvD">Delete</button>`:""}</div>`;
   document.body.appendChild(v);const close=()=>v.remove();v.onclick=e=>{if(e.target===v)close()};v.querySelector("#pvX").onclick=close;
-  const d=v.querySelector("#pvD");if(d)d.onclick=async()=>{if(d.dataset.c!=="1"){d.dataset.c="1";d.textContent="Tap again to delete";return}try{await db.doc("photos/"+id).delete();if(p.driveId)drive({action:"del",id:p.driveId}).catch(()=>{});else await db.doc("photoData/"+id).delete();close();toast("Photo deleted")}catch(err){fail(err)}};
-  try{let src="";if(p.driveId)src=(await drive({action:"get",id:p.driveId})).data;else{const s=await db.doc("photoData/"+id).get();if(s.exists)src=s.data().data}
+  const d=v.querySelector("#pvD");if(d)d.onclick=async()=>{if(d.dataset.c!=="1"){d.dataset.c="1";d.textContent="Tap again to delete";return}try{await db.doc(pc+"/"+id).delete();if(p.driveId)drive({action:"del",id:p.driveId}).catch(()=>{});else await db.doc(dc+"/"+id).delete();close();toast("Photo deleted")}catch(err){fail(err)}};
+  try{let src="";if(p.driveId)src=(await drive({action:"get",id:p.driveId})).data;else{const s=await db.doc(dc+"/"+id).get();if(s.exists)src=s.data().data}
     if(src&&v.isConnected)v.querySelector("img").src=src}catch(e){console.warn(e)}}
 
 /* ---------- MORE ---------- */
@@ -765,7 +768,8 @@ function renderMgr(){
   const ref=db.doc("access/members");
   el.querySelectorAll("[data-acc]").forEach(b=>b.onclick=async()=>{const r=S.reqs.find(x=>x.id===b.dataset.id);if(!r)return;
     try{if(b.dataset.acc!=="no"){const nm=(el.querySelector(`[data-rn="${CSS.escape(r.id)}"]`)||{}).value||r.name||r.email;await ref.set({members:{[r.email.toLowerCase()]:{name:nm.trim(),role:b.dataset.acc}}},{merge:true});
-      for(const x of S.tix.filter(x=>x.who===nm.trim()&&!x.email))await db.doc("tickets/"+x.id).update({email:r.email.toLowerCase()}).catch(()=>{})}
+      for(const x of S.tix.filter(x=>x.who===nm.trim()&&!x.email)){await db.doc("tickets/"+x.id).update({email:r.email.toLowerCase()}).catch(()=>{});
+        for(const p of S.tixPhotos.filter(p=>p.targetId===x.id))await db.doc("tixphotos/"+p.id).update({email:r.email.toLowerCase()}).catch(()=>{})}}
       await db.doc("requests/"+r.id).delete();toast(b.dataset.acc==="no"?"Ignored":"Let in")}catch(err){fail(err)}});
   el.querySelectorAll("[data-role]").forEach(s=>s.onchange=async()=>{const m={...S.access};m[s.dataset.role]={...m[s.dataset.role],role:s.value};try{await ref.set({members:m})}catch(err){fail(err)}});
   el.querySelectorAll("[data-rmm]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Tap again";return}const m={...S.access};delete m[b.dataset.rmm];try{await ref.set({members:m})}catch(err){fail(err)}});
@@ -818,7 +822,7 @@ function applyAccess(){
   if(!isMgr()){S.calMode="day";S.calDate=new Date()}
   startData();let v=S.view;try{v=localStorage.getItem("tws-view")||v}catch(e){}show(v);
 }
-auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.ideas=[];S.fix=[];S.buy=[];S.photos=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
+auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.tixPhotos=[];S.ideas=[];S.fix=[];S.buy=[];S.photos=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
   if(!u){gate("Total Welding Solutions crew only. Sign in with your Google account.",false);return}
   gate("Checking you're on the crew…",false);watchAccess(u);
 });
@@ -840,6 +844,7 @@ function startData(){
   on(db.collection("repairs"),s=>{S.fix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("tobuy"),s=>{S.buy=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("ideas"),s=>{S.ideas=s.docs.map(d=>({id:d.id,...d.data()}));render()});
+  on(isMgr()?db.collection("tixphotos"):db.collection("tixphotos").where("email","==",myEmail()),s=>{S.tixPhotos=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(isMgr()?db.collection("tickets"):db.collection("tickets").where("email","==",myEmail()),s=>{S.tix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   if(isMgr()){
     on(db.collection("requests"),s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data()}));render()});
