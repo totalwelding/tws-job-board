@@ -1,6 +1,6 @@
 # TWS Job Board
 
-Crew app for Total Welding Solutions: clock on/off with GPS, job cards (site contact, plan, consumables), week calendar, and under More: tickets & licence expiry reminders, repairs, to-buy list, ideas, and the manager tab (hours, $, expected hours, timesheets, crew access).
+Crew app for Total Welding Solutions: clock on/off with GPS, job cards (site contact, plan, consumables, before/during/after photos), week calendar, and under More: tickets & licence expiry reminders, repairs (with photos), to-buy list, ideas, and the manager tab (hours, $, expected hours, timesheets, crew access).
 
 - Live at https://totalwelding.github.io/tws-job-board/
 - Sign-in: Google. New crew sign in, then a manager lets them in under **Manager → Crew access**. Owner: luke@totalwelding.com.au.
@@ -32,4 +32,5 @@ All dates are `YYYY-MM-DD` (Brisbane local). Times are ISO UTC. Money is $ ex GS
 | `ideas/{id}` | title, cat, detail, jobId, jobCode, who, at, status (new/trying/adopted/no), votes[], reply |
 | `repairs/{id}` | item, problem, down (can't use), jobId, jobCode, who, at, status (reported/fixing/parts/fixed/gone), fixNote, cost |
 | `tobuy/{id}` | item, qty, unit, kind (consumable/tool/material/ppe), urgency (today/week/whenever), jobId, jobCode, supplier, who, at, status (needed/ordered/got), repairId |
+| `photos/{id}` | target (job/repair), targetId, jobCode, stage (before/during/after/damage), thumb, who, date, at. Full image in `photoData/{id}` |
 | `money/{jobId}` | managers: expectedHrs, pricing (fixed/hourly), quote, chargeRate, markup. `money/_rates`: labourCost, chargeRate |

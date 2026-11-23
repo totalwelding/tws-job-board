@@ -125,6 +125,16 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 .tk .ex{font:500 12px var(--mono);white-space:nowrap}
 .due{display:block;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-weight:500;background:var(--amber-bg);color:var(--amber)}
 .due.bad{background:var(--bad-bg);color:var(--bad)}
+/* photos */
+.ph{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:6px}
+.ph button.th{padding:0;border:0;border-radius:8px;overflow:hidden;aspect-ratio:1;background:var(--sunk);cursor:pointer}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph label.add{aspect-ratio:1;border:2px dashed var(--line);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;gap:2px}
+.ph label.add span{font-size:22px}
+.ph label.add input{display:none}
+.pstage{font:600 13px var(--display);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:4px 0 2px}
+.viewer{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:40;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(16px + env(safe-area-inset-bottom,0px));color:#fff}
+.viewer img{max-width:100%;max-height:78vh;border-radius:6px}
 /* gate */
 #gate{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:30px;text-align:center;background:#16202b;color:#fff}
 #gate img{width:96px;height:96px;border-radius:20px}
@@ -238,7 +248,7 @@ function mapsUrl(j){if(hasLoc(j))return`https://www.google.com/maps/search/?api=
 firebase.initializeApp(window.FIREBASE_CONFIG);
 const auth=firebase.auth(),db=firebase.firestore();
 try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
-const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],fix:[],buy:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
+const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],fix:[],buy:[],photos:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
   view:"clock",calWeek:monday(new Date()),mgrWeek:monday(new Date()),open:null,pick:null,loaded:{},seeded:false};
 let subs=[];
 const myEmail=()=>(S.user&&S.user.email||"").toLowerCase();
@@ -404,6 +414,7 @@ function renderSheet(){
     <div class="stat"><b>${money(lab+cs)}</b><span>Total cost</span></div><div class="stat ${rev-lab-cs>=0?"good":"bad"}"><b>${money(rev-lab-cs)}</b><span>Profit</span></div></div>
     ${!S.rates.labourCost?`<div class="muted small">Set labour cost under Manager → Rates to see real profit.</div>`:""}`:""}`}
 
+  ${isNew?"":`<div class="panel"><h3>Photos</h3>${[["before","Before"],["during","During"],["after","After"]].map(([k,l])=>`<div class="pstage">${l} (${photosOf("job",j.id,k).length})</div>${photoGrid("job",j.id,k,j.code,"Add "+l.toLowerCase())}`).join("")}</div>`}
   <div class="panel"><h3>Plan</h3>
     <ul class="plan" id="plan">${(j.plan||[]).map((s,i)=>`<li class="${s.done?"dn":""}"><input type="checkbox" data-step="${i}" ${s.done?"checked":""} ${isNew?"disabled":""} aria-label="Done"><span>${esc(s.t)}</span>${mg?`<button class="btn small link" data-up="${i}" aria-label="Move up">↑</button><button class="btn small link danger" data-rm="${i}" aria-label="Remove">✕</button>`:""}</li>`).join("")}</ul>
     ${isNew?`<div class="muted small">Create the job first, then add the steps.</div>`:`<form class="row" id="stepF"><input class="in" id="stepIn" placeholder="Add a step, e.g. Mark out and cut piece C" style="flex:1 1 200px;width:auto"><button class="btn" type="submit">Add step</button></form>`}
@@ -439,7 +450,7 @@ function renderSheet(){
   <div class="panel"><h3>Hours</h3>${sh.length?`<div class="tbl"><table><thead><tr><th>Date</th><th>Who</th><th>Time</th><th class="num">Hrs</th></tr></thead><tbody>${sh.map(s=>`<tr><td>${fmtD(s.date)}</td><td>${esc(s.who)}</td><td>${fmtT(s.on)}–${s.off?fmtT(s.off):"now"}<br>${locPill(s.onLoc)}</td><td class="num">${s.hours!=null?hf(s.hours):"…"}</td></tr>`).join("")}</tbody></table></div>`:`<div class="muted">No hours yet.</div>`}</div>`}
   </aside>`;
   $("scrim").onclick=closeSheet;$("xS").onclick=closeSheet;
-  const root=$("sheetRoot");root.querySelector(".sheet").scrollTop=keep;bindCons(root);
+  const root=$("sheetRoot");root.querySelector(".sheet").scrollTop=keep;bindCons(root);bindPhotos(root);
   const so=$("sOn");if(so)so.onclick=()=>clockOn(j.id,so);
   // plan
   const sf=$("stepF");if(sf)sf.onsubmit=async ev=>{ev.preventDefault();const t=$("stepIn").value.trim();if(!t)return;try{await db.doc("jobs/"+j.id).update({plan:[...(j.plan||[]),{t,done:false}],updatedAt:new Date().toISOString()})}catch(err){fail(err)}};
@@ -563,6 +574,32 @@ function renderIdeas(){
   el.querySelectorAll("[data-idel]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc("ideas/"+b.dataset.idel).delete()}catch(err){fail(err)}});
 }
 
+/* ---------- PHOTOS (stored compressed in Firestore: photos = thumb + info, photoData = full size) ---------- */
+function loadImg(file){return new Promise((res,rej)=>{const u=URL.createObjectURL(file),i=new Image();i.onload=()=>{res(i);setTimeout(()=>URL.revokeObjectURL(u),1000)};i.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("bad image"))};i.src=u})}
+function shrink(img,max,q){const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const c=document.createElement("canvas");c.width=Math.round(img.naturalWidth*s);c.height=Math.round(img.naturalHeight*s);c.getContext("2d").drawImage(img,0,0,c.width,c.height);return c.toDataURL("image/jpeg",q)}
+async function addPhotos(files,target,targetId,stage,code){
+  const list=[...files];if(!list.length)return;let n=0;toast(`Uploading ${list.length} photo${list.length>1?"s":""}…`,60000);
+  for(const f of list){try{const img=await loadImg(f);let full=shrink(img,1600,.72);if(full.length>850000)full=shrink(img,1200,.6);if(full.length>950000)full=shrink(img,900,.55);
+      const thumb=shrink(img,240,.6),id="p"+Date.now().toString(36)+Math.random().toString(36).slice(2,6),now=new Date();
+      const bt=db.batch();bt.set(db.doc("photoData/"+id),{data:full});
+      bt.set(db.doc("photos/"+id),{business:BIZ,target,targetId,jobCode:code||"",stage,thumb,w:img.naturalWidth,h:img.naturalHeight,who:S.me,email:myEmail(),date:ymd(now),at:now.toISOString(),caption:""});
+      await bt.commit();n++}catch(e){console.warn(e)}}
+  toast(n===list.length?`${n} photo${n>1?"s":""} saved`:`${n} of ${list.length} saved. Try the others again.`,3000)}
+function photosOf(target,id,stage){return S.photos.filter(p=>p.target===target&&p.targetId===id&&(!stage||p.stage===stage)).sort((a,b)=>String(a.at).localeCompare(b.at))}
+function photoGrid(target,id,stage,code,label){const ps=photosOf(target,id,stage);
+  return`<div class="ph">${ps.map(p=>`<button type="button" class="th" data-ph="${esc(p.id)}" aria-label="Photo by ${esc(p.who)}"><img src="${p.thumb}" alt="" loading="lazy"></button>`).join("")}
+  <label class="add"><span>📷</span>${esc(label||"Add")}<input type="file" accept="image/*" multiple data-up="${esc(target)}|${esc(id)}|${esc(stage)}|${esc(code||"")}"></label></div>`}
+function bindPhotos(root){
+  root.querySelectorAll("input[data-up]").forEach(i=>i.onchange=async()=>{const [tg,id,st,code]=i.dataset.up.split("|");const fs=[...i.files];i.value="";i.blur();await addPhotos(fs,tg,id,st,code)});
+  root.querySelectorAll("[data-ph]").forEach(b=>b.onclick=()=>viewPhoto(b.dataset.ph));
+}
+async function viewPhoto(id){const p=S.photos.find(x=>x.id===id);if(!p)return;
+  const v=document.createElement("div");v.className="viewer";v.innerHTML=`<img src="${p.thumb}" alt=""><div class="small">${esc(p.stage)} · ${esc(p.who)} · ${fmtD(p.date)} ${fmtT(p.at)}</div>
+  <div class="row" style="justify-content:center"><button class="btn small" id="pvX">Close</button>${isMgr()||p.email===myEmail()?`<button class="btn small danger" id="pvD">Delete</button>`:""}</div>`;
+  document.body.appendChild(v);const close=()=>v.remove();v.onclick=e=>{if(e.target===v)close()};v.querySelector("#pvX").onclick=close;
+  const d=v.querySelector("#pvD");if(d)d.onclick=async()=>{if(d.dataset.c!=="1"){d.dataset.c="1";d.textContent="Tap again to delete";return}try{await db.doc("photos/"+id).delete();await db.doc("photoData/"+id).delete();close();toast("Photo deleted")}catch(err){fail(err)}};
+  try{const s=await db.doc("photoData/"+id).get();if(s.exists&&v.isConnected)v.querySelector("img").src=s.data().data}catch(e){}}
+
 /* ---------- MORE ---------- */
 function moreCounts(){const due=S.tix.filter(x=>x.expiry&&daysLeft(x.expiry)<=(+x.remind||30)&&(isMgr()||x.who===S.me)).length;
   return{tix:due,fix:S.fix.filter(x=>x.status!=="fixed"&&x.status!=="gone").length,buy:S.buy.filter(x=>x.status!=="got").length,ideas:S.ideas.filter(x=>(x.status||"new")==="new").length,req:isMgr()?S.reqs.length:0}}
@@ -585,7 +622,7 @@ function renderFix(){const el=$("v-fix");if(busy(el))return;
   const open=S.fix.filter(x=>x.status!=="fixed"&&x.status!=="gone").sort((a,b)=>(b.down?1:0)-(a.down?1:0)||String(a.at).localeCompare(b.at));
   const done=S.fix.filter(x=>x.status==="fixed"||x.status==="gone").sort((a,b)=>String(b.updatedAt||b.at).localeCompare(a.updatedAt||a.at)).slice(0,20);
   const row=x=>`<div class="panel"><div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div style="flex:1;min-width:0"><b style="font-size:15px">${esc(x.item)}</b>${x.down?` <span class="pill bad">can't use</span>`:""}<br><span class="muted small">${esc(x.who)} · ${fmtD(String(x.at).slice(0,10))}${x.jobCode?" · "+esc(x.jobCode):""}</span></div><span class="pill ${FPILL[x.status]||""}">${(FSTAT.find(s=>s[0]===x.status)||FSTAT[0])[1]}</span></div>
-    ${x.problem?`<div style="white-space:pre-wrap">${esc(x.problem)}</div>`:""}${x.fixNote?`<div class="small"><b>Fix:</b> ${esc(x.fixNote)}${x.cost?` · ${money2(x.cost)}`:""}</div>`:""}
+    ${x.problem?`<div style="white-space:pre-wrap">${esc(x.problem)}</div>`:""}${photoGrid("repair",x.id,"damage",x.jobCode,"Photo")}${x.fixNote?`<div class="small"><b>Fix:</b> ${esc(x.fixNote)}${x.cost?` · ${money2(x.cost)}`:""}</div>`:""}
     <div class="row"><select class="in" data-fst="${esc(x.id)}" style="flex:0 1 160px">${selOpts(FSTAT,x.status)}</select><input class="in" data-fnote="${esc(x.id)}" value="${esc(x.fixNote)}" placeholder="What was done / part needed" style="flex:1 1 150px;width:auto"><input class="in" data-fcost="${esc(x.id)}" type="number" step="0.01" min="0" value="${esc(x.cost||"")}" placeholder="$" style="flex:0 1 80px;width:auto"><button class="btn small" data-fsv="${esc(x.id)}">Save</button>
     ${x.status!=="fixed"?`<button class="btn small" data-f2b="${esc(x.id)}">🛒 Add part to buy list</button>`:""}${isMgr()?`<button class="btn small link danger" data-del-repairs="${esc(x.id)}">✕</button>`:""}</div></div>`;
   el.innerHTML=`<h2 class="v">Repairs</h2><div class="panel"><h3>Report broken gear</h3><form id="fF" class="grid2">
@@ -593,17 +630,18 @@ function renderFix(){const el=$("v-fix");if(busy(el))return;
     <label class="f full">What's wrong<textarea name="problem" rows="2"></textarea></label>
     <label class="f">Job (optional)<select name="job">${jobOpts()}</select></label>
     <label class="f" style="flex-direction:row;align-items:center;gap:8px;text-transform:none;font-size:14px;color:var(--fg);font-weight:500"><input type="checkbox" name="down" style="width:20px;height:20px">Can't use it until fixed</label>
+    <label class="f full">Photos of the damage<input name="pics" type="file" accept="image/*" multiple></label>
     <div class="full"><button class="btn primary" type="submit">Report</button></div></form></div>
     ${open.length?open.map(row).join(""):`<div class="panel muted">Nothing broken. Nice.</div>`}
     ${done.length?`<details><summary class="grp">Fixed / written off (${done.length})</summary>${done.map(row).join("")}</details>`:""}`;
   $("fF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements,j=job(f.job.value);const d={business:BIZ,item:f.it.value.trim(),problem:f.problem.value.trim(),down:f.down.checked,jobId:j?j.id:"",jobCode:j?j.code:"",who:S.me,email:myEmail(),at:new Date().toISOString(),status:"reported",fixNote:"",cost:0};
-    if(!d.item)return;try{await db.collection("repairs").add(d);e.target.reset();toast("Reported")}catch(err){fail(err)}};
+    if(!d.item)return;const pics=[...f.pics.files];try{const ref=await db.collection("repairs").add(d);e.target.reset();toast("Reported");if(pics.length)await addPhotos(pics,"repair",ref.id,"damage",d.jobCode)}catch(err){fail(err)}};
   el.querySelectorAll("[data-fsv]").forEach(b=>b.onclick=()=>{const id=b.dataset.fsv,q=k=>el.querySelector(`[data-${k}="${CSS.escape(id)}"]`).value;const st=q("fst");
     setField("repairs",id,{status:st,fixNote:q("fnote").trim(),cost:r2(q("fcost")),...(st==="fixed"||st==="gone"?{down:false}:{})}).then(()=>toast("Saved"))});
   el.querySelectorAll("[data-f2b]").forEach(b=>b.onclick=async()=>{const x=S.fix.find(f=>f.id===b.dataset.f2b);if(!x)return;const part=el.querySelector(`[data-fnote="${CSS.escape(x.id)}"]`).value.trim();
     try{await db.collection("tobuy").add({business:BIZ,item:(part||"Part")+" for "+x.item,qty:1,unit:"",kind:"tool",urgency:x.down?"today":"week",jobId:x.jobId||"",jobCode:x.jobCode||"",supplier:"",estCost:0,who:S.me,email:myEmail(),at:new Date().toISOString(),status:"needed",repairId:x.id});
       await setField("repairs",x.id,{...(x.status==="reported"?{status:"parts"}:{}),...(part?{fixNote:part}:{})});toast("Added to To buy")}catch(err){fail(err)}});
-  bindDel(el,"repairs");
+  bindDel(el,"repairs");bindPhotos(el);
 }
 
 /* ---------- TO BUY ---------- */
@@ -733,7 +771,7 @@ function applyAccess(){
   $("gate").hidden=true;$("app").hidden=false;$("meName").textContent=S.me+(isMgr()?" · manager":"");
   startData();let v=S.view;try{v=localStorage.getItem("tws-view")||v}catch(e){}show(v);
 }
-auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.ideas=[];S.fix=[];S.buy=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
+auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.ideas=[];S.fix=[];S.buy=[];S.photos=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
   if(!u){gate("Total Welding Solutions crew only. Sign in with your Google account.",false);return}
   gate("Checking you're on the crew…",false);watchAccess(u);
 });
@@ -750,6 +788,7 @@ function startData(){
   on(db.collection("shifts").where("date",">=",since),s=>{S.shifts=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("consumables").where("date",">=",since),s=>{S.cons=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   watchCal();
+  on(db.collection("photos"),s=>{S.photos=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("repairs"),s=>{S.fix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("tobuy"),s=>{S.buy=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("ideas"),s=>{S.ideas=s.docs.map(d=>({id:d.id,...d.data()}));render()});
