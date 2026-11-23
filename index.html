@@ -266,7 +266,7 @@ function mapsUrl(j){if(hasLoc(j))return`https://www.google.com/maps/search/?api=
 firebase.initializeApp(window.FIREBASE_CONFIG);
 const auth=firebase.auth(),db=firebase.firestore();
 try{db.enablePersistence({synchronizeTabs:true}).catch(()=>{})}catch(e){}
-const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],fix:[],buy:[],photos:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
+const S={user:null,me:null,role:null,access:{},reqs:[],tix:[],ideas:[],plant:null,fix:[],buy:[],photos:[],jobs:[],shifts:[],cons:[],cal:[],money:{},rates:{labourCost:0,chargeRate:0},
   view:"clock",calDate:new Date(),calMode:"week",mgrWeek:monday(new Date()),open:null,pick:null,loaded:{},seeded:false};
 let subs=[];
 const myEmail=()=>(S.user&&S.user.email||"").toLowerCase();
@@ -543,6 +543,8 @@ function calSheet(d,p){
 /* ---------- TICKETS ---------- */
 const TIX=["Driver's licence","HR truck licence","MR truck licence","High risk: dogging","High risk: rigging","High risk: forklift (LF)","High risk: EWP (WP)","High risk: crane","White card","First aid","CPR","Working at heights","Confined space","Welding certification","Gas test atmospheres","Site induction (GPC)","Vehicle rego","Vehicle insurance","Public liability","WorkCover","Plant inspection"];
 const COMPANY="TWS (company)";
+const DEFAULT_PLANT=["Crane truck","Trailer","Diesel welder","Suitcase feeders","Plasma cutter","BT50"];
+const plantList=()=>(S.plant&&S.plant.length?S.plant:DEFAULT_PLANT);
 const daysLeft=d=>Math.round((new Date(d+"T00:00:00")-new Date(ymd(new Date())+"T00:00:00"))/864e5);
 function dueTxt(n){return n<0?`expired ${-n} day${n===-1?"":"s"} ago`:n===0?"expires today":`expires in ${n} day${n===1?"":"s"}`}
 function dueBanner(list,all){const l=list.filter(x=>x.expiry&&daysLeft(x.expiry)<=(+x.remind||30)).sort((a,b)=>String(a.expiry).localeCompare(b.expiry));if(!l.length)return"";
@@ -551,25 +553,26 @@ function dueBanner(list,all){const l=list.filter(x=>x.expiry&&daysLeft(x.expiry)
 document.addEventListener("click",e=>{const a=e.target.closest("[data-go]");if(!a)return;e.preventDefault();show(a.dataset.go)});
 function renderTix(){
   const el=$("v-tix");if(el.contains(document.activeElement)&&/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName))return;
-  const mg=isMgr(),who=mg?[...people(),COMPANY]:[S.me];
+  const mg=isMgr(),who=mg?[...people(),COMPANY,...plantList()]:[S.me];
   const by={};S.tix.forEach(x=>(by[x.who]=by[x.who]||[]).push(x));
   const order=[...new Set([...who,...Object.keys(by)])].filter(w=>by[w]);
   const pill=x=>{if(!x.expiry)return`<span class="pill">no expiry</span>`;const n=daysLeft(x.expiry);return`<span class="pill ${n<0?"bad":n<=(+x.remind||30)?"warn":"ok"}">${n<0?"Expired":n<=(+x.remind||30)?n+" days":"OK"}</span>`};
   el.innerHTML=`<h2 class="v">Tickets &amp; licences</h2>`+dueBanner(S.tix,mg)+
   `<div class="panel"><h3>Add a ticket</h3><form id="tF" class="grid2">
-    ${mg?`<label class="f">Whose<select name="who">${who.map(p=>`<option>${esc(p)}</option>`).join("")}</select></label>`:""}
+    ${mg?`<label class="f">Whose<select name="who"><optgroup label="People">${people().map(p=>`<option>${esc(p)}</option>`).join("")}</optgroup><optgroup label="Business">${[COMPANY].map(p=>`<option>${esc(p)}</option>`).join("")}</optgroup><optgroup label="Plant &amp; vehicles">${plantList().map(p=>`<option>${esc(p)}</option>`).join("")}</optgroup></select></label>`:""}
     <label class="f ${mg?"":"full"}">Ticket<input name="type" list="tixList" required placeholder="e.g. HR truck licence"></label>
     <label class="f">Expiry date<input name="expiry" type="date"></label>
     <label class="f">Remind me<select name="remind"><option value="30">30 days before</option><option value="60">60 days before</option><option value="90">90 days before</option><option value="14">14 days before</option></select></label>
     <label class="f">Number / class (optional)<input name="num"></label>
     <label class="f">Note<input name="note" placeholder="Where the card is, who issued it…"></label>
+    <label class="f full">Link to a copy (optional)<input name="link" type="url" placeholder="Paste a Google Drive link to the card or certificate"></label>
     <div class="full"><button class="btn primary" type="submit">Save ticket</button></div>
   </form><datalist id="tixList">${TIX.map(x=>`<option value="${esc(x)}">`).join("")}</datalist></div>`+
-  (order.length?order.map(w=>`<div class="panel"><h3>${esc(w)}</h3>${by[w].sort((a,b)=>String(a.expiry||"9999").localeCompare(b.expiry||"9999")).map(x=>`<div class="tk"><div><b>${esc(x.type)}</b>${x.num?` <span class="muted small">${esc(x.num)}</span>`:""}<br><span class="ex ${x.expiry&&daysLeft(x.expiry)<0?"":"muted"}">${x.expiry?fmtD(x.expiry)+" · "+dueTxt(daysLeft(x.expiry)):"No expiry"}</span>${x.note?`<br><span class="muted small">${esc(x.note)}</span>`:""}</div>${pill(x)}<button class="btn small" data-ren="${esc(x.id)}">Renewed</button><button class="btn small link danger" data-delt="${esc(x.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>`).join("")
+  (order.length?order.map(w=>`<div class="panel"><h3>${esc(w)}</h3>${by[w].sort((a,b)=>String(a.expiry||"9999").localeCompare(b.expiry||"9999")).map(x=>`<div class="tk"><div><b>${esc(x.type)}</b>${x.num?` <span class="muted small">${esc(x.num)}</span>`:""}<br><span class="ex ${x.expiry&&daysLeft(x.expiry)<0?"":"muted"}">${x.expiry?fmtD(x.expiry)+" · "+dueTxt(daysLeft(x.expiry)):"No expiry"}</span>${x.note?`<br><span class="muted small">${esc(x.note)}</span>`:""}${/^https:\/\//.test(x.link||"")?`<br><a class="small" href="${esc(x.link)}" target="_blank" rel="noopener">📄 View copy</a>`:""}</div>${pill(x)}<button class="btn small" data-ren="${esc(x.id)}">Renewed</button><button class="btn small link danger" data-delt="${esc(x.id)}" aria-label="Delete">✕</button></div>`).join("")}</div>`).join("")
    :`<div class="panel muted">No tickets yet. Add licences and tickets above and the app will warn ${mg?"you and them":"you"} before they expire.</div>`);
   $("tF").onsubmit=async e=>{e.preventDefault();const f=e.target.elements;const w=mg?f.who.value:S.me;
-    const em=w===S.me?myEmail():w===COMPANY?"":(Object.keys(S.access).find(k=>S.access[k].name===w)||"");
-    const d={business:BIZ,who:w,email:em,type:f.type.value.trim(),expiry:f.expiry.value,remind:+f.remind.value||30,num:f.num.value.trim(),note:f.note.value.trim(),by:S.me,updatedAt:new Date().toISOString()};
+    const em=w===S.me?myEmail():(w===COMPANY||plantList().includes(w))?"":(Object.keys(S.access).find(k=>S.access[k].name===w)||"");
+    const d={business:BIZ,who:w,email:em,type:f.type.value.trim(),expiry:f.expiry.value,remind:+f.remind.value||30,num:f.num.value.trim(),note:f.note.value.trim(),link:f.link.value.trim(),by:S.me,updatedAt:new Date().toISOString()};
     if(!d.type)return;try{await db.collection("tickets").add(d);e.target.reset();toast("Ticket saved")}catch(err){fail(err)}};
   el.querySelectorAll("[data-delt]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Delete?";return}try{await db.doc("tickets/"+b.dataset.delt).delete()}catch(err){fail(err)}});
   el.querySelectorAll("[data-ren]").forEach(b=>b.onclick=()=>{const x=S.tix.find(t=>t.id===b.dataset.ren);if(!x)return;const row=b.closest(".tk");
@@ -738,6 +741,8 @@ function renderMgr(){
     <div class="tbl"><table><thead><tr><th>Date</th><th>Who</th><th>Job</th><th>Time</th><th class="num">Hrs</th><th></th></tr></thead><tbody>${sh.map(s=>`<tr><td>${fmtD(s.date)}</td><td>${esc(s.who)}</td><td>${esc(s.jobCode)}</td><td>${fmtT(s.on)}–${s.off?fmtT(s.off):"now"}${s.breakMin?`<br><span class="muted small">${s.breakMin} min break</span>`:""}<br>${locPill(s.onLoc)}</td><td class="num">${s.hours!=null?hf(s.hours):"…"}</td><td><button class="btn small" data-fix="${esc(s.id)}">Fix</button></td></tr>`).join("")||`<tr><td colspan="6" class="muted">No hours this week.</td></tr>`}</tbody></table></div>
     <button class="btn small" id="addShift" style="align-self:flex-start">+ Add hours for someone</button></div>
 
+  <div class="panel"><h3>Plant &amp; vehicles</h3><p class="muted small" style="margin:0">One per line. These show in Tickets (for rego, insurance and inspections) and keep their own reminders.</p>
+    <form id="plF" class="row"><textarea class="in" name="pl" rows="4" style="flex:1 1 220px;width:auto">${esc(plantList().join("\n"))}</textarea><button class="btn primary" type="submit">Save</button></form></div>
   <div class="panel"><h3>Rates</h3><form id="rF" class="row">
     <label class="f">Labour cost $/h (wages + super + on-costs)<input name="labourCost" type="number" step="0.5" min="0" value="${esc(S.rates.labourCost||"")}"></label>
     <label class="f">Default charge rate $/h<input name="chargeRate" type="number" step="0.5" min="0" value="${esc(S.rates.chargeRate||"")}"></label>
@@ -755,6 +760,7 @@ function renderMgr(){
   $("csv").onclick=()=>{const q=v=>`"${String(v??"").replace(/"/g,'""')}"`;
     const L=[["Date","Worker","Business","Job code","Site","Clock on","Clock off","Break min","Hours","On site","Note"].join(",")].concat(sh.map(s=>[s.date,s.who,s.business||BIZ,s.jobCode,s.site,s.on?hm(s.on):"",s.off?hm(s.off):"",s.breakMin||0,s.hours??"",s.onLoc&&s.onLoc.onSite===true?"yes":s.onLoc&&s.onLoc.onSite===false?"no":"",s.note].map(q).join(",")));
     const u=URL.createObjectURL(new Blob([L.join("\n")],{type:"text/csv"}));const x=document.createElement("a");x.href=u;x.download=`tws-timesheet-${a}.csv`;document.body.appendChild(x);x.click();x.remove()};
+  $("plF").onsubmit=async e=>{e.preventDefault();const l=e.target.elements.pl.value.split("\n").map(s=>s.trim()).filter(Boolean);try{await db.doc("settings/plant").set({names:l});toast("Plant list saved")}catch(err){fail(err)}};
   $("rF").onsubmit=async e=>{e.preventDefault();try{await db.doc("money/_rates").set({labourCost:r2(e.target.elements.labourCost.value),chargeRate:r2(e.target.elements.chargeRate.value)});toast("Rates saved")}catch(err){fail(err)}};
   const ref=db.doc("access/members");
   el.querySelectorAll("[data-acc]").forEach(b=>b.onclick=async()=>{const r=S.reqs.find(x=>x.id===b.dataset.id);if(!r)return;
@@ -809,6 +815,7 @@ function applyAccess(){
   else{stopData();S.me=null;db.doc("requests/"+S.user.uid).set({email:em,name:S.user.displayName||"",at:new Date().toISOString()}).catch(()=>{});
     gate("Thanks "+((S.user.displayName||"").split(" ")[0]||"")+"! Luke needs to let you onto the crew. Once he does, this opens by itself.",true);return}
   $("gate").hidden=true;$("app").hidden=false;$("meName").textContent=S.me+(isMgr()?" · manager":"");
+  if(!isMgr()){S.calMode="day";S.calDate=new Date()}
   startData();let v=S.view;try{v=localStorage.getItem("tws-view")||v}catch(e){}show(v);
 }
 auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.ideas=[];S.fix=[];S.buy=[];S.photos=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
@@ -828,6 +835,7 @@ function startData(){
   on(db.collection("shifts").where("date",">=",since),s=>{S.shifts=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("consumables").where("date",">=",since),s=>{S.cons=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   watchCal();
+  on(db.doc("settings/plant"),s=>{S.plant=s.exists?(s.data().names||[]):null;render()});
   on(db.collection("photos"),s=>{S.photos=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("repairs"),s=>{S.fix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(db.collection("tobuy"),s=>{S.buy=s.docs.map(d=>({id:d.id,...d.data()}));render()});

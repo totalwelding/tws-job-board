@@ -29,7 +29,8 @@ All dates are `YYYY-MM-DD` (Brisbane local). Times are ISO UTC. Money is $ ex GS
 | `consumables/{id}` | date, jobId, jobCode, site, item, qty, unit, cost, who |
 | `calendar/{date_who_job}` | date, who, jobId, jobCode, site, hrs (planned), note |
 | `totals/{date}` | **dashboard reads this**: hours, hoursByJob{code:h}, hoursByWho{name:h}, consumables, consumablesByJob{code:$}, jobs{code:site}, shifts |
-| `tickets/{id}` | who, email (blank = company), type, expiry, remind (days), num, note |
+| `tickets/{id}` | who (person, "TWS (company)" or a plant item), email (blank = company/plant, managers only), type, expiry, remind (days), num, note, link |
+| `settings/plant` | names[] (plant & vehicles list) |
 | `ideas/{id}` | title, cat, detail, jobId, jobCode, who, at, status (new/trying/adopted/no), votes[], reply |
 | `repairs/{id}` | item, problem, down (can't use), jobId, jobCode, who, at, status (reported/fixing/parts/fixed/gone), fixNote, cost |
 | `tobuy/{id}` | item, qty, unit, kind (consumable/tool/material/ppe), urgency (today/week/whenever), jobId, jobCode, supplier, who, at, status (needed/ordered/got), repairId |
