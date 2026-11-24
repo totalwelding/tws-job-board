@@ -58,6 +58,8 @@ h3{font:600 17px var(--display);text-transform:uppercase;letter-spacing:.04em;ma
 label.f{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;min-width:0}
 label.f input,label.f select,label.f textarea,.in{padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);font-weight:400;text-transform:none;letter-spacing:0;color:var(--fg);width:100%;font-size:15px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.wx{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}.wx>div{background:var(--sunk);border-radius:8px;padding:8px 4px}
+.dl{display:flex;flex-direction:column;gap:2px;border-top:1px solid var(--line);padding-top:8px}.dli{display:flex;gap:8px;align-items:center;padding:5px 0;font-size:15px}.dli input{width:20px;height:20px}.dli.done span{text-decoration:line-through;color:var(--muted)}
 .full{grid-column:1/-1}
 @media (max-width:520px){.grid2{grid-template-columns:1fr}}
 .row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
@@ -347,7 +349,7 @@ function renderClock(){
   const wk=monday(new Date()),a=ymd(wk),b=ymd(addDays(wk,6));
   const mine=S.shifts.filter(s=>s.email===myEmail()&&s.date>=a&&s.date<=b).sort((x,y)=>String(y.on).localeCompare(x.on));
   const tot=mine.reduce((t,s)=>t+(+s.hours||0),0);
-  let h=dueBanner(S.tix.filter(x=>x.who===S.me));
+  let h=dayStart()+dueBanner(S.tix.filter(x=>x.who===S.me));
   if(o){const j=job(o.jobId)||{};
     const long=(Date.now()-new Date(o.on))/36e5>14;
     h+=`<div class="panel clock"><span class="pill ok" style="align-self:center">ON THE CLOCK</span>
@@ -376,8 +378,26 @@ function renderClock(){
   const cs=$("cJob");if(cs)cs.onchange=()=>{S.pick=cs.value;renderClock()};
   const fs=$("findSite");if(fs)fs.onclick=findSite;
   const off=$("clockOff");if(off)off.onclick=()=>clockOff(o,off);
-  bindCons(el);bindOpen(el);
+  bindCons(el);bindOpen(el);bindDay(el);
 }
+/* ---------- DAY START: weather + daily to-do lists ---------- */
+function dayStart(){
+  if(!S.dlSub){S.dl=[];S.dlSub=db.collection("daylists").where("date",">=",ymd(addDays(new Date(),-1))).onSnapshot(s=>{S.dl=s.docs.map(d=>({id:d.id,...d.data()}));if(S.view==="clock")renderClock()},e=>console.warn(e))}
+  if(!S.wx&&!S.wxLoading)loadWx();
+  const t=ymd(new Date()),order=[S.me,...people().filter(p=>p!==S.me)];
+  const lists=(S.dl||[]).filter(l=>l.date===t).sort((a,b)=>{const ia=order.indexOf(a.who),ib=order.indexOf(b.who);return(ia<0?99:ia)-(ib<0?99:ib)});
+  let h=`<div class="panel"><div class="row" style="justify-content:space-between;align-items:baseline"><h3>Day start · ${fmtD(t)}</h3><a class="small" href="https://www.bom.gov.au/places/qld/gladstone/forecast/" target="_blank" rel="noopener">BOM forecast</a></div>${wxHtml()}`;
+  h+=lists.length?lists.map(l=>`<div class="dl"><b>${esc(l.who)}${l.who===S.me?" (you)":""}</b>${(l.items||[]).map((it,i)=>`<label class="dli${it.done?" done":""}"><input type="checkbox" data-dl="${esc(l.id)}|${i}" ${it.done?"checked":""}><span>${esc(it.t)}</span>${it.done&&it.by?`<small class="muted">✓ ${esc(it.by)}</small>`:""}</label>`).join("")}</div>`).join(""):`<div class="muted">No to-do lists for today yet.</div>`;
+  h+=`<form id="dlAdd" class="row" style="gap:6px;flex-wrap:wrap">${isMgr()?`<select class="in" id="dlWho" style="flex:0 0 120px;width:auto">${people().map(p=>`<option ${p===S.me?"selected":""}>${esc(p)}</option>`).join("")}</select>`:""}<input class="in" id="dlText" placeholder="Add a to-do for today" style="flex:1 1 160px;width:auto"><button class="btn small" type="submit">Add</button></form></div>`;
+  return h}
+function bindDay(el){
+  el.querySelectorAll("[data-dl]").forEach(c=>c.onchange=async()=>{const[id,i]=c.dataset.dl.split("|");const l=(S.dl||[]).find(x=>x.id===id);if(!l)return;const items=(l.items||[]).map(x=>({...x}));const it=items[+i];if(!it)return;it.done=c.checked;it.by=c.checked?S.me:"";it.at=c.checked?new Date().toISOString():"";try{await db.doc("daylists/"+id).set({items},{merge:true})}catch(e){fail(e)}});
+  const f=$("dlAdd");if(f)f.onsubmit=async e=>{e.preventDefault();const t=$("dlText").value.trim();if(!t)return;const who=isMgr()&&$("dlWho")?$("dlWho").value:S.me;const d=ymd(new Date()),id=d+"_"+who;const l=(S.dl||[]).find(x=>x.id===id);const items=[...((l&&l.items)||[]).map(x=>({...x})),{t,done:false}];try{$("dlText").value="";$("dlText").blur();await db.doc("daylists/"+id).set({business:BIZ,date:d,who,items},{merge:true});toast("Added for "+who)}catch(err){fail(err)}};
+}
+async function loadWx(){S.wxLoading=true;try{const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude=-23.84&longitude=151.26&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,wind_speed_10m_max,wind_gusts_10m_max,uv_index_max&timezone=Australia%2FBrisbane&forecast_days=3");if(!r.ok)throw 0;S.wx=(await r.json()).daily}catch(e){S.wx="x"}S.wxLoading=false;if(S.view==="clock")renderClock()}
+const WXN=c=>c===0?"☀️ Clear":c<=2?"🌤 Mostly sunny":c===3?"☁️ Cloudy":c<=48?"🌫 Fog":c<=57?"🌦 Drizzle":c<=67?"🌧 Rain":c<=77?"🌨 Snow":c<=82?"🌦 Showers":"⛈ Storms";
+function wxHtml(){const w=S.wx;if(!w)return`<div class="muted small">Loading forecast…</div>`;if(w==="x")return`<div class="muted small">Forecast didn't load. Tap BOM forecast.</div>`;
+  return`<div class="wx">${w.time.map((d,i)=>`<div><b>${i?fmtD(d).split(" ")[0]:"Today"}</b><div>${WXN(w.weather_code[i])}</div><div>${Math.round(w.temperature_2m_min[i])}–${Math.round(w.temperature_2m_max[i])}°</div><div class="small muted">Rain ${w.precipitation_probability_max[i]??"–"}% · ${w.precipitation_sum[i]} mm</div><div class="small muted">Wind ${Math.round(w.wind_speed_10m_max[i])}, gusts ${Math.round(w.wind_gusts_10m_max[i])} km/h</div><div class="small muted">UV ${Math.round(w.uv_index_max[i])}</div></div>`).join("")}</div>${w.wind_gusts_10m_max[0]>=40?`<div class="notice" style="margin:0">Gusty today: think about crane lifts, work at height and hot work.</div>`:""}${w.precipitation_probability_max[0]>=60?`<div class="notice" style="margin:0">Rain likely today: plan inside or shed work.</div>`:""}`}
 setInterval(()=>{const e=$("elapsed"),o=myOpen();if(e&&o)e.textContent=elapsed(o.on)},20000);
 async function findSite(){const b=$("findSite");b.disabled=true;b.textContent="Finding you…";const loc=await getLoc();b.disabled=false;b.textContent="📍 Find my site";
   if(!loc)return toast("Couldn't get your location. Turn on location for this app.",4000);
