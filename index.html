@@ -229,6 +229,9 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 
 <div id="sheetRoot"></div>
 <div id="toast" class="toast" hidden></div>
+<div id="guestBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:60;background:#ffe9a8;color:#3a2a00;text-align:center;font:600 14px system-ui;padding:6px 10px">👀 Guest view: look around. Nothing you tap changes anything. Use 💬 Feedback to suggest changes.</div>
+<button type="button" id="fbBtn" hidden style="position:fixed;right:14px;bottom:84px;z-index:61;border:0;border-radius:999px;padding:12px 16px;background:#1f5fd1;color:#fff;font:600 15px system-ui;box-shadow:0 4px 14px #0004">💬 Feedback</button>
+<div id="fbBox" hidden style="position:fixed;inset:0;z-index:70;background:#0007;display:flex;align-items:flex-end;justify-content:center"><div style="background:var(--panel);color:var(--fg);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px"><h2 style="margin:0 0 6px">Feedback / ideas</h2><p class="muted small" style="margin:0 0 8px">What's confusing, missing or could be better on this screen? Luke sees every note.</p><textarea id="fbText" class="in" rows="5" style="width:100%"></textarea><div class="row" style="margin-top:8px;gap:8px"><button type="button" class="btn primary" id="fbSend">Send</button><button type="button" class="btn" id="fbCancel">Cancel</button></div></div></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -274,6 +277,14 @@ let subs=[];
 const myEmail=()=>(S.user&&S.user.email||"").toLowerCase();
 const isOwner=()=>OWNERS.includes(myEmail());
 const isMgr=()=>isOwner()||S.role==="manager";
+const isGuest=()=>!isOwner()&&S.role==="guest";
+let FB=[];
+// Guests can look but not change anything: block every write except feedback
+(()=>{const F=firebase.firestore,ok=path=>/^feedback\//.test(path)||/^requests\//.test(path);
+  const deny=()=>{toast("Guest view: look only. Tap 💬 Feedback to suggest a change.",3500);const e=new Error("guest");e.code="guest";return Promise.reject(e)};
+  for(const m of ["set","update","delete"]){const o=F.DocumentReference.prototype[m];F.DocumentReference.prototype[m]=function(...a){return isGuest()&&!ok(this.path)?deny():o.apply(this,a)}}
+  const oa=F.CollectionReference.prototype.add;F.CollectionReference.prototype.add=function(...a){return isGuest()&&!ok(this.path+"/x")?deny():oa.apply(this,a)};
+  const ob=F.WriteBatch.prototype.commit;F.WriteBatch.prototype.commit=function(...a){return isGuest()?deny():ob.apply(this,a)}})();
 const job=id=>S.jobs.find(j=>j.id===id);
 const jobName=id=>{const j=job(id);return j?`${j.code} ${j.title}`:"(deleted job)"};
 function people(){const n=Object.values(S.access).map(m=>m.name).filter(Boolean);const all=[...new Set([...DEFAULT_CREW,...n])];return all}
@@ -310,7 +321,7 @@ const expHrs=id=>+((S.money[id]||{}).expectedHrs)||0;
 const jobCons=id=>S.cons.filter(c=>c.jobId===id).reduce((a,c)=>a+(+c.cost||0),0);
 const myOpen=()=>S.shifts.find(s=>s.email===myEmail()&&!s.off);
 function nextCode(){let m=0;S.jobs.forEach(j=>{const n=parseInt(String(j.code||"").replace(/\D/g,""),10);if(n>m)m=n});return"TWS-"+String(m+1).padStart(4,"0")}
-function fail(err){console.warn(err);toast(err&&err.code==="permission-denied"?"You don't have permission to change that.":"That didn't save. Check your signal and try again.",4000)}
+function fail(err){if(err&&err.code==="guest")return;console.warn(err);toast(err&&err.code==="permission-denied"?"You don't have permission to change that.":"That didn't save. Check your signal and try again.",4000)}
 
 /* ============ daily totals (for the owner dashboard) ============ */
 async function recompute(date){
@@ -809,10 +820,11 @@ function renderMgr(){
     <button class="btn primary" type="submit">Save</button></form></div>
 
   <div class="panel"><h3>Crew access</h3>
-    ${S.reqs.length?`<div class="grp">Asking to join</div>`+S.reqs.map(r=>`<div class="mem"><div><b>${esc(r.name||r.email)}</b><br><span class="small muted">${esc(r.email)}</span></div><input class="in" data-rn="${esc(r.id)}" value="${esc((r.name||"").split(" ")[0])}" style="flex:0 1 120px" aria-label="Name on the board"><button class="btn small go" data-acc="crew" data-id="${esc(r.id)}">Let in</button><button class="btn small" data-acc="manager" data-id="${esc(r.id)}">As manager</button><button class="btn small" data-acc="no" data-id="${esc(r.id)}">Ignore</button></div>`).join(""):`<div class="muted small">No one waiting. New crew open the app, sign in with Google, and show up here.</div>`}
-    ${Object.entries(S.access).sort((x,y)=>(x[1].name||"").localeCompare(y[1].name||"")).map(([em,x])=>`<div class="mem"><div><b>${esc(x.name)}</b> · ${x.role==="manager"?"Manager":"Crew"}<br><span class="small muted">${esc(em)}</span></div>${OWNERS.includes(em)?"":`<select class="in" data-role="${esc(em)}" style="flex:0 1 120px"><option value="crew" ${x.role!=="manager"?"selected":""}>Crew</option><option value="manager" ${x.role==="manager"?"selected":""}>Manager</option></select><button class="btn small danger" data-rmm="${esc(em)}">Remove</button>`}</div>`).join("")}
+    ${S.reqs.length?`<div class="grp">Asking to join</div>`+S.reqs.map(r=>`<div class="mem"><div><b>${esc(r.name||r.email)}</b><br><span class="small muted">${esc(r.email)}</span></div><input class="in" data-rn="${esc(r.id)}" value="${esc((r.name||"").split(" ")[0])}" style="flex:0 1 120px" aria-label="Name on the board"><button class="btn small go" data-acc="crew" data-id="${esc(r.id)}">Let in</button><button class="btn small" data-acc="manager" data-id="${esc(r.id)}">As manager</button><button class="btn small" data-acc="guest" data-id="${esc(r.id)}">Guest (look only)</button><button class="btn small" data-acc="no" data-id="${esc(r.id)}">Ignore</button></div>`).join(""):`<div class="muted small">No one waiting. New crew open the app, sign in with Google, and show up here.</div>`}
+    ${Object.entries(S.access).sort((x,y)=>(x[1].name||"").localeCompare(y[1].name||"")).map(([em,x])=>`<div class="mem"><div><b>${esc(x.name)}</b> · ${x.role==="manager"?"Manager":x.role==="guest"?"Guest (look only)":"Crew"}<br><span class="small muted">${esc(em)}</span></div>${OWNERS.includes(em)?"":`<select class="in" data-role="${esc(em)}" style="flex:0 1 120px"><option value="crew" ${x.role!=="manager"&&x.role!=="guest"?"selected":""}>Crew</option><option value="manager" ${x.role==="manager"?"selected":""}>Manager</option><option value="guest" ${x.role==="guest"?"selected":""}>Guest (look only)</option></select><button class="btn small danger" data-rmm="${esc(em)}">Remove</button>`}</div>`).join("")}
   </div>
 
+  <div class="panel"><h3>Feedback from guests and crew</h3><div id="fbList">${FB.length?FB.map(f=>`<div class="mem"><div><b>${esc(f.name||"")}</b>${f.guest?" · guest":""}${f.tab?" · "+esc(f.tab):""}<br>${esc(f.text)}<br><span class="small muted">${esc((f.at||"").slice(0,16).replace("T"," "))}</span></div><button class="btn small" data-fbdone="${esc(f.id)}">Done</button></div>`).join(""):`<div class="muted small">None yet. Everyone on the board has a 💬 Feedback button.</div>`}</div></div>
   <div class="panel"><h3>Xero reports</h3><div class="muted">Coming next: invoices, bills and profit by job from Xero, and the owner dashboard. Daily totals are already being saved for it.</div></div>`;
   $("mPrev").onclick=()=>{S.mgrWeek=addDays(S.mgrWeek,-7);renderMgr()};$("mNext").onclick=()=>{S.mgrWeek=addDays(S.mgrWeek,7);renderMgr()};
   el.querySelectorAll("[data-fix]").forEach(b=>b.onclick=()=>shiftSheet(b.dataset.fix));
@@ -829,6 +841,7 @@ function renderMgr(){
         for(const p of S.tixPhotos.filter(p=>p.targetId===x.id))await db.doc("tixphotos/"+p.id).update({email:r.email.toLowerCase()}).catch(()=>{})}}
       await db.doc("requests/"+r.id).delete();toast(b.dataset.acc==="no"?"Ignored":"Let in")}catch(err){fail(err)}});
   el.querySelectorAll("[data-role]").forEach(s=>s.onchange=async()=>{const m={...S.access};m[s.dataset.role]={...m[s.dataset.role],role:s.value};try{await ref.set({members:m})}catch(err){fail(err)}});
+  el.querySelectorAll("[data-fbdone]").forEach(b=>b.onclick=async()=>{try{await db.doc("feedback/"+b.dataset.fbdone).delete()}catch(err){fail(err)}});
   el.querySelectorAll("[data-rmm]").forEach(b=>b.onclick=async()=>{if(b.dataset.c!=="1"){b.dataset.c="1";b.textContent="Tap again";return}const m={...S.access};delete m[b.dataset.rmm];try{await ref.set({members:m})}catch(err){fail(err)}});
 }
 function shiftSheet(id){
@@ -875,11 +888,13 @@ function applyAccess(){
   else if(m){S.me=m.name;S.role=m.role||"crew"}
   else{stopData();S.me=null;db.doc("requests/"+S.user.uid).set({email:em,name:S.user.displayName||"",at:new Date().toISOString()}).catch(()=>{});
     gate("Thanks "+((S.user.displayName||"").split(" ")[0]||"")+"! Luke needs to let you onto the crew. Once he does, this opens by itself.",true);return}
-  $("gate").hidden=true;$("app").hidden=false;$("meName").textContent=S.me+(isMgr()?" · manager":"");
+  $("gate").hidden=true;$("app").hidden=false;$("meName").textContent=S.me+(isMgr()?" · manager":isGuest()?" · guest":"");
+  $("guestBar").hidden=!isGuest();$("fbBtn").hidden=false;document.body.style.paddingTop=isGuest()?"30px":"";
   if(!isMgr()){S.calMode="day";S.calDate=new Date()}
   startData();let v=S.view;try{v=localStorage.getItem("tws-view")||v}catch(e){}show(v);
 }
 auth.onAuthStateChanged(u=>{subs.forEach(f=>{try{f()}catch(e){}});subs=[];stopData();closeSheet();S.user=u;S.me=null;S.role=null;S.access={};S.reqs=[];S.money={};S.rates={labourCost:0,chargeRate:0};S.tix=[];S.tixPhotos=[];S.ideas=[];S.fix=[];S.buy=[];S.photos=[];S.jobs=[];S.shifts=[];S.cons=[];S.cal=[];S.loaded={};S.seeded=false;
+  $("guestBar").hidden=true;$("fbBtn").hidden=true;document.body.style.paddingTop="";FB=[];
   if(!u){gate("Total Welding Solutions crew only. Sign in with your Google account.",false);return}
   gate("Checking you're on the crew…",false);watchAccess(u);
 });
@@ -904,6 +919,7 @@ function startData(){
   on(isMgr()?db.collection("tixphotos"):db.collection("tixphotos").where("email","==",myEmail()),s=>{S.tixPhotos=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   on(isMgr()?db.collection("tickets"):db.collection("tickets").where("email","==",myEmail()),s=>{S.tix=s.docs.map(d=>({id:d.id,...d.data()}));render()});
   if(isMgr()){
+    on(db.collection("feedback").orderBy("at","desc").limit(50),s=>{FB=s.docs.map(d=>({id:d.id,...d.data()}));render()});
     on(db.collection("requests"),s=>{S.reqs=s.docs.map(d=>({id:d.id,...d.data()}));render()});
     on(db.collection("money"),s=>{const o={};s.docs.forEach(d=>o[d.id]=d.data());S.rates=o._rates||{labourCost:0,chargeRate:0};delete o._rates;S.money=o;render()});
   }
@@ -917,6 +933,11 @@ async function seed(){
   for(const [code,title] of [["TWS-0001","Curtis Ferry"],["TWS-0002","East Coast"]])
     await db.doc("jobs/"+code.toLowerCase()).set({code,business:BIZ,title,site:title,client:"",address:"",contactName:"",contactPhone:"",status:"Active",start:"",end:"",crew:[],plan:[],notes:"",lat:null,lng:null,radius:300,createdAt:"2026-11-02T09:00:00.000Z",updatedAt:now}).catch(()=>{});
 }
+$("fbBtn").onclick=()=>{$("fbBox").hidden=false;$("fbText").focus()};
+$("fbCancel").onclick=()=>$("fbBox").hidden=true;
+$("fbBox").onclick=e=>{if(e.target.id==="fbBox")$("fbBox").hidden=true};
+$("fbSend").onclick=async()=>{const t=$("fbText").value.trim();if(!t)return;
+  try{await db.collection("feedback").add({text:t,name:S.me||"",email:myEmail(),guest:isGuest(),tab:S.view||"",at:new Date().toISOString()});$("fbText").value="";$("fbBox").hidden=true;toast("Thanks! Sent to Luke.")}catch(err){toast("Couldn't send. Try again.")}};
 try{const v=localStorage.getItem("tws-view");if(v)S.view=v}catch(e){}
 show(S.view);
 if("serviceWorker" in navigator)navigator.serviceWorker.register("sw.js").catch(()=>{});

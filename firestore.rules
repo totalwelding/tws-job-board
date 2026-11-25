@@ -12,6 +12,12 @@ service cloud.firestore {
     function member() {
       return request.auth != null && (owner() || email() in members());
     }
+    function guest() {
+      return !owner() && member() && members()[email()].role == 'guest';
+    }
+    function crew() {
+      return member() && !guest();
+    }
     function manager() {
       return owner() || (member() && members()[email()].role == 'manager');
     }
@@ -33,32 +39,38 @@ service cloud.firestore {
     // Clock on/off: crew write their own, managers fix anyone's
     match /shifts/{id} {
       allow read: if member();
-      allow create: if manager() || (member() && request.resource.data.email == email());
-      allow update: if manager() || (member() && resource.data.email == email()
+      allow create: if manager() || (crew() && request.resource.data.email == email());
+      allow update: if manager() || (crew() && resource.data.email == email()
                                      && request.resource.data.email == email());
       allow delete: if manager();
     }
     // Tickets & licences: crew see and change their own, managers see all (company and plant too)
     match /tickets/{id} {
       allow read, delete: if manager() || (member() && resource.data.email == email());
-      allow update: if manager() || (member() && resource.data.email == email()
+      allow update: if manager() || (crew() && resource.data.email == email()
                                      && request.resource.data.email == email());
-      allow create: if manager() || (member() && request.resource.data.email == email());
+      allow create: if manager() || (crew() && request.resource.data.email == email());
     }
     // Photos of tickets & licences: same privacy as the tickets
     match /tixphotos/{id} {
       allow read, delete: if manager() || (member() && resource.data.email == email());
-      allow create: if manager() || (member() && request.resource.data.email == email());
+      allow create: if manager() || (crew() && request.resource.data.email == email());
       allow update: if manager();
     }
     match /tixphotoData/{id} {
       allow read, delete: if manager() || (member() && resource.data.email == email());
-      allow create: if manager() || (member() && request.resource.data.email == email());
+      allow create: if manager() || (crew() && request.resource.data.email == email());
       allow update: if manager();
+    }
+    // Feedback: anyone on the board (guests too) can send it, managers read and clear it
+    match /feedback/{id} {
+      allow create: if member();
+      allow read, delete: if manager();
     }
     // Everything else (jobs, consumables, calendar, totals, photos, repairs, to buy, ideas): crew
     match /{col}/{rest=**} {
-      allow read, write: if member() && !(col in ['access', 'requests', 'money', 'shifts', 'tickets', 'tixphotos', 'tixphotoData']);
+      allow read: if member() && !(col in ['access', 'requests', 'money', 'shifts', 'tickets', 'tixphotos', 'tixphotoData', 'feedback']);
+      allow write: if crew() && !(col in ['access', 'requests', 'money', 'shifts', 'tickets', 'tixphotos', 'tixphotoData', 'feedback']);
     }
   }
 }
