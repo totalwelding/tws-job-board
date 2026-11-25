@@ -229,7 +229,7 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute
 
 <div id="sheetRoot"></div>
 <div id="toast" class="toast" hidden></div>
-<div id="guestBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:60;background:#ffe9a8;color:#3a2a00;text-align:center;font:600 14px system-ui;padding:6px 10px">👀 Guest view: look around. Nothing you tap changes anything. Use 💬 Feedback to suggest changes.</div>
+<div id="guestBar" hidden style="position:fixed;top:0;left:0;right:0;z-index:60;height:30px;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.3px;background:#ffe9a8;color:#3a2a00;text-align:center;font:600 14px system-ui;padding:6px 10px">👀 Guest view: look around. Nothing you tap changes anything. Use 💬 Feedback to suggest changes.</div>
 <button type="button" id="fbBtn" hidden style="position:fixed;right:14px;bottom:84px;z-index:61;border:0;border-radius:999px;padding:12px 16px;background:#1f5fd1;color:#fff;font:600 15px system-ui;box-shadow:0 4px 14px #0004">💬 Feedback</button>
 <div id="fbBox" hidden style="position:fixed;inset:0;z-index:70;background:#0007;display:flex;align-items:flex-end;justify-content:center"><div style="background:var(--panel);color:var(--fg);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px"><h2 style="margin:0 0 6px">Feedback / ideas</h2><p class="muted small" style="margin:0 0 8px">What's confusing, missing or could be better on this screen? Luke sees every note.</p><textarea id="fbText" class="in" rows="5" style="width:100%"></textarea><div class="row" style="margin-top:8px;gap:8px"><button type="button" class="btn primary" id="fbSend">Send</button><button type="button" class="btn" id="fbCancel">Cancel</button></div></div></div>
 
@@ -889,7 +889,8 @@ function applyAccess(){
   else{stopData();S.me=null;db.doc("requests/"+S.user.uid).set({email:em,name:S.user.displayName||"",at:new Date().toISOString()}).catch(()=>{});
     gate("Thanks "+((S.user.displayName||"").split(" ")[0]||"")+"! Luke needs to let you onto the crew. Once he does, this opens by itself.",true);return}
   $("gate").hidden=true;$("app").hidden=false;$("meName").textContent=S.me+(isMgr()?" · manager":isGuest()?" · guest":"");
-  $("guestBar").hidden=!isGuest();$("fbBtn").hidden=false;document.body.style.paddingTop=isGuest()?"30px":"";
+  {const md=isGuest()?["#ffe9a8","#3a2a00","👀 GUEST MODE · look only"]:isMgr()?["#1e7a3a","#fff","🔑 MANAGER MODE · "+S.me]:["#1f5fd1","#fff","👷 CREW MODE · "+S.me];
+   const g=$("guestBar");g.style.background=md[0];g.style.color=md[1];g.textContent=md[2];g.hidden=false;$("fbBtn").hidden=false;document.body.style.paddingTop="30px";const h=document.querySelector("header");if(h)h.style.top="30px"}
   if(!isMgr()){S.calMode="day";S.calDate=new Date()}
   startData();let v=S.view;try{v=localStorage.getItem("tws-view")||v}catch(e){}show(v);
 }
